@@ -1,1 +1,1 @@
-redo-ifchange Symgrep
+redo-ifchange Semgrep
