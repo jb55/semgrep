@@ -7,7 +7,7 @@ int main(void) {
     printf("%d\n", i);
   }
 
-  if (i != 1) {
+  if (i != (i==2? i+3 : i+4)) {
   }
 }
 
