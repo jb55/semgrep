@@ -1,0 +1,11 @@
+name:           Semgrep
+version:        0.1
+cabal-version:  >= 1.2
+build-type:     Simple
+
+executable semgrep
+  hs-source-dirs:  src
+  main-is:         Semgrep.hs
+  build-depends:   base >= 4, language-c, syb, language-python, pretty
+  ghc-options:     -Wall
+
