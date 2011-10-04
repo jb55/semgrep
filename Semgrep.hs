@@ -62,6 +62,8 @@ instance C.Pretty a => Show (NodeInfo a) where
     "NodeInfo " ++ show p ++ " \"" ++ (show $ C.pretty a) ++ "\""
 
 
+
+
 gtrace a = trace (gshow a) a
 
 fromCAssignOp :: C.CAssignOp -> AssignOp
@@ -106,12 +108,11 @@ fromCExpr e = UnkExpr (show e)
 cNodeInfo :: (C.CNode a) => a -> NodeInfo a
 cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n) n
   where
-    nodeInfo (C.OnlyPos p len)         = makePos p Nothing
-    nodeInfo (C.NodeInfo p len name) = makePos p Nothing
-    makePos pos mn = Position (Just $ C.posOffset pos)
-                              (mn <|> (Just $ C.posFile pos))
-                              (Just $ C.posRow pos)
-                              (Just $ C.posColumn pos)
+    nodeInfo n  = makePos (C.posOfNode n)
+    makePos pos = Position (Just $ C.posOffset pos)
+                           (Just $ C.posFile pos)
+                           (Just $ C.posRow pos)
+                           (Just $ C.posColumn pos)
 
 annotCNode :: C.CExpr -> Expr -> AExpr C.CExpr
 annotCNode cexpr expr = Annotated expr (cNodeInfo cexpr)
