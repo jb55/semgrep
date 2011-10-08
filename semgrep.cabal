@@ -5,7 +5,7 @@ build-type:     Simple
 
 executable semgrep
   hs-source-dirs:  src
-  main-is:         Semgrep.hs
+  main-is:         Main.hs
   build-depends:   base >= 4, language-c, syb, language-python, pretty
   ghc-options:     -Wall
 

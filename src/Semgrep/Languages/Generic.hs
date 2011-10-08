@@ -1,4 +1,10 @@
+{-# LANGUAGE RankNTypes, NoMonomorphismRestriction, DeriveDataTypeable,
+             DeriveFunctor #-}
+
 module Semgrep.Languages.Generic where
+
+import           Data.Generics
+import           Semgrep
 
 data BinOp = LeOp
            | GrOp
@@ -30,7 +36,10 @@ data Expr = Var String
           | UnkExpr String
           deriving (Show, Typeable, Data)
 
-data Ast a = Ast a
+type AExpr = Annotated NodeInfo Expr
+
+data Ast = Ast [AExpr]
+
 
 isCondOp :: BinOp -> Bool
 isCondOp LeOp   = True
@@ -47,3 +56,9 @@ isCondExpr (ConditionalOp op _ _ ) = True
 isCondExpr (BinaryOp op _ _ )      = isCondOp op
 isCondExpr _                       = False
 
+
+exprs :: Ast -> [AExpr]
+exprs (Ast exprs) = exprs
+
+conditions :: [AExpr] -> [AExpr]
+conditions = filter (strip . fmap isCondExpr)

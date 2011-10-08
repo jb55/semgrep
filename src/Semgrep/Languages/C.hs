@@ -4,6 +4,9 @@ module Semgrep.Languages.C (
 
 
 import qualified Language.C as C
+import           Semgrep.Languages.Generic
+import           Data.Generics
+import           Semgrep
 
 -- Converts a C assignment operator to a generic one
 fromCAssignOp :: C.CAssignOp -> AssignOp
@@ -35,7 +38,7 @@ fromCConst (C.CStrConst cstring _)      = StringConst (C.getCString cstring)
 
 -- Converts a C expression to a generic expression
 fromCExpr :: C.CExpr -> Expr
-fromCExpr (C.CVar ident _)       = Var (identToString ident)
+fromCExpr (C.CVar ident _)       = Var (C.identToString ident)
 fromCExpr (C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                           (fromCExpr e1)
                                           (fromCExpr e2)
@@ -46,22 +49,22 @@ fromCExpr (C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
 fromCExpr (C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
                                             (fromCExpr e1)
                                             (fromCExpr e2)
-fromCExpr e = UnkExpr (show e)
+fromCExpr e = UnkExpr (gshow e)
 
 -- Takes a CNode and returns a generic NodeInfo
-cNodeInfo :: (C.CNode a) => a -> NodeInfo a
-cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n) n
+cNodeInfo :: (C.CNode a) => a -> NodeInfo
+cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n)
   where
     nodeInfo n  = makePos (C.posOfNode n)
-    makePos pos = Position (Just $ C.posOffset pos)
+    makePos pos = Position Nothing
                            (Just $ C.posFile pos)
                            (Just $ C.posRow pos)
                            (Just $ C.posColumn pos)
 
 
 -- Annotate a Expr with NodeInfo from a C.Expr
-annotCNode :: C.CExpr -> Expr -> AExpr C.CExpr
-annotCNode cexpr expr = Annotated expr (cNodeInfo cexpr)
+annotCNode :: C.CExpr -> Expr -> AExpr
+annotCNode cexpr expr = Annotated (cNodeInfo cexpr) expr
 
 
 -- Converts a C expression to a generic expression and annotates the generic
@@ -78,19 +81,23 @@ isIfStmt _ = False
 
 -- Traverses a C translation unit and returns a list of C if statements
 ifStmts :: C.CTranslUnit -> [C.CStat]
-ifStmts = listify isIfExpr
+ifStmts = listify isIfStmt
+
+allCExprs :: C.CTranslUnit -> [C.CExpr]
+allCExprs = listify (const True)
 
 
 -- Takes a FilePath string and returns a generic AST, annotated with NodeInfo
 -- from the C expressions.
-parse :: FilePath -> IO (Maybe (Ast NodeInfo))
+parse :: FilePath -> IO (Maybe Ast)
 parse file = do
   stream <- C.readInputStream file
-  let parsecC = C.parseC stream (C.initPos file)
+  let parsedC = C.parseC stream (C.initPos file)
 
   case parsedC of
     Left txt        -> return Nothing
     Right transUnit -> do
       let all = allCExprs transUnit
-      let convertedExprs = map fromCExpr' all
+      let exprs = map fromCExpr' all
+      return $ Just $ Ast exprs
 
