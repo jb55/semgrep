@@ -52,8 +52,8 @@ fromCExpr (C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
 fromCExpr e = UnkExpr (gshow e)
 
 -- Takes a CNode and returns a generic NodeInfo
-cNodeInfo :: (C.CNode a) => a -> NodeInfo
-cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n)
+cNodeInfo :: (C.Pretty a, C.CNode a) => a -> NodeInfo
+cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n) (Just . show . C.pretty $ n)
   where
     nodeInfo n  = makePos (C.posOfNode n)
     makePos pos = Position Nothing

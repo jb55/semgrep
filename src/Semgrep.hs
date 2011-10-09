@@ -27,14 +27,15 @@ try' :: (Show a) => Maybe a -> String
 try' = maybe "??" show
 
 try :: Maybe String -> String -> String
-try m s = maybe (show s) id m
+try m s = maybe s id m
 
 instance Show Position where
-  show (Position o f l c) = 
+  show (Position o f l c) =
     try f "Unknown File" ++ ": (" ++ try' l ++ ", " ++ try' c ++ ")"
 
 
-data NodeInfo = NodeInfo Position
+data NodeInfo = NodeInfo Position (Maybe String)
 
 instance Show NodeInfo where
-  show (NodeInfo p) = "NodeInfo " ++ show p
+  show (NodeInfo p s) =
+    "NodeInfo " ++ show p ++ maybe "" (\x -> " \"" ++ x ++ "\"") s
