@@ -4,6 +4,7 @@ module Semgrep.Languages.C (
 
 
 import qualified Language.C as C
+import           Language.C.System.GCC(newGCC)
 import           Semgrep.Languages.Generic
 import           Data.Generics
 import           Semgrep
@@ -64,7 +65,7 @@ cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n) (Just . show . C.pretty $ n)
 
 -- Annotate a Expr with NodeInfo from a C.Expr
 annotCNode :: C.CExpr -> Expr -> AExpr
-annotCNode cexpr expr = Annotated (cNodeInfo cexpr) expr
+annotCNode cexpr expr = Annotated (Just $ cNodeInfo cexpr) expr
 
 
 -- Converts a C expression to a generic expression and annotates the generic
@@ -89,15 +90,15 @@ allCExprs = listify (const True)
 
 -- Takes a FilePath string and returns a generic AST, annotated with NodeInfo
 -- from the C expressions.
-parse :: FilePath -> IO (Maybe Ast)
-parse file = do
-  stream <- C.readInputStream file
-  let parsedC = C.parseC stream (C.initPos file)
+parse :: FilePath -> [String] -> IO (Either String Ast)
+parse file incs = do
+  let gcc = newGCC "gcc"
+  parsedC <- C.parseCFile gcc Nothing incs file
 
   case parsedC of
-    Left txt        -> return Nothing
+    Left txt        -> return $ Left $ show txt
     Right transUnit -> do
       let all = allCExprs transUnit
       let exprs = map fromCExpr' all
-      return $ Just $ Ast exprs
+      return $ Right $ Ast exprs
 

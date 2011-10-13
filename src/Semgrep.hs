@@ -5,7 +5,10 @@ module Semgrep (
   Annotated(..)
 , Position(..)
 , NodeInfo(..)
+, Option(..)
+, PythonVersion(..)
 , strip
+, stripData
 ) where
 
 import           Data.Generics
@@ -15,6 +18,9 @@ data Annotated a b = Annotated a b
 
 strip :: Annotated a b -> b
 strip (Annotated _ b) = b
+
+stripData :: Annotated a b -> a
+stripData (Annotated a _) = a
 
 data Position = Position
               { posOffset :: Maybe Int
@@ -39,3 +45,9 @@ data NodeInfo = NodeInfo Position (Maybe String)
 instance Show NodeInfo where
   show (NodeInfo p s) =
     "NodeInfo " ++ show p ++ maybe "" (\x -> " \"" ++ x ++ "\"") s
+
+data PythonVersion = Python2 | Python3
+
+data Option = Include String
+            | PythonVersion PythonVersion
+

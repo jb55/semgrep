@@ -26,7 +26,7 @@ data ConstVal = IntConst Int
               | CharConst Char
               | FloatConst Float
               | StringConst String
-           deriving (Show, Typeable, Data, Eq)
+              deriving (Show, Typeable, Data, Eq)
 
 data Expr = Var String
           | ConstVal ConstVal
@@ -36,10 +36,11 @@ data Expr = Var String
           | UnkExpr String
           deriving (Show, Typeable, Data)
 
-type AExpr = Annotated NodeInfo Expr
+type AExpr = Annotated (Maybe NodeInfo) Expr
 
 data Ast = Ast [AExpr]
 
+type LanguageParser = FilePath -> IO (Either String Ast)
 
 isCondOp :: BinOp -> Bool
 isCondOp LeOp   = True
@@ -62,3 +63,5 @@ exprs (Ast exprs) = exprs
 
 conditions :: [AExpr] -> [AExpr]
 conditions = filter (strip . fmap isCondExpr)
+
+
