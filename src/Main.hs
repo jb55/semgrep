@@ -47,14 +47,15 @@ process file = do
       parsed <- e
       case parsed of
         Left msg  -> print msg
-        Right ast -> do
-          let all = exprs ast
+        Right project -> do
+          let all = exprs project
           let conds = conditions all
 
-    --    putStrLn "\nAll Expressions"
-    --    mapM_ print (map stripData all)
+          putStrLn "\nAll Expressions"
+          mapM_ print all
           putStrLn "\nConditional Expressions"
-          mapM_ print (map stripData conds)
+          mapM_ print conds
+          putStrLn (show project)
     --    putStrLn "\nIf Statements"
     --    mapM_ prettyPrint ifs
 

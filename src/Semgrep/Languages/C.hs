@@ -1,3 +1,5 @@
+{-# LANGUAGE ViewPatterns #-}
+
 module Semgrep.Languages.C (
   parse
 ) where
@@ -39,39 +41,33 @@ fromCConst (C.CStrConst cstring _)      = StringConst (C.getCString cstring)
 
 -- Converts a C expression to a generic expression
 fromCExpr :: C.CExpr -> Expr
-fromCExpr (C.CVar ident _)       = Var (C.identToString ident)
-fromCExpr (C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
+fromCExpr n@(C.CVar ident _)       = Var (C.identToString ident) (makeNodeInfo n)
+fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                           (fromCExpr e1)
                                           (fromCExpr e2)
-fromCExpr (C.CConst c)           = ConstVal (fromCConst c)
-fromCExpr (C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
+                                          (makeNodeInfo n)
+fromCExpr n@(C.CConst c)           = ConstVal (fromCConst c) (makeNodeInfo n)
+fromCExpr n@(C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
                                                  (fromCExpr e3)
-fromCExpr (C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
-                                            (fromCExpr e1)
-                                            (fromCExpr e2)
-fromCExpr e = UnkExpr (gshow e)
+                                                 (makeNodeInfo n)
+fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
+                                              (fromCExpr e1)
+                                              (fromCExpr e2)
+                                              (makeNodeInfo n)
+
+fromCExpr e = UnkExpr (gshow e) (makeNodeInfo e)
 
 -- Takes a CNode and returns a generic NodeInfo
-cNodeInfo :: (C.Pretty a, C.CNode a) => a -> NodeInfo
-cNodeInfo n = NodeInfo (nodeInfo $ C.nodeInfo n) (Just . show . C.pretty $ n)
+makeNodeInfo :: (C.Pretty a, C.Pos a) => a -> Maybe NodeInfo
+makeNodeInfo p = Just $ NodeInfo (makePos p) (makePretty p)
   where
-    nodeInfo n  = makePos (C.posOfNode n)
-    makePos pos = Position Nothing
-                           (Just $ C.posFile pos)
-                           (Just $ C.posRow pos)
-                           (Just $ C.posColumn pos)
-
-
--- Annotate a Expr with NodeInfo from a C.Expr
-annotCNode :: C.CExpr -> Expr -> AExpr
-annotCNode cexpr expr = Annotated (Just $ cNodeInfo cexpr) expr
-
-
--- Converts a C expression to a generic expression and annotates the generic
--- expression with position information from C node
-fromCExpr' :: C.CExpr -> AExpr
-fromCExpr' ce = annotCNode ce (fromCExpr ce)
+    makePretty   = Just . show . C.pretty
+    makePos      = Just . makePos' . C.posOf
+    makePos' pos = Position Nothing
+                            (Just $ C.posFile pos)
+                            (Just $ C.posRow pos)
+                            (Just $ C.posColumn pos)
 
 
 -- Takes a C statement a returns if it's an 'If' statement or not
@@ -84,13 +80,61 @@ isIfStmt _ = False
 ifStmts :: C.CTranslUnit -> [C.CStat]
 ifStmts = listify isIfStmt
 
+
 allCExprs :: C.CTranslUnit -> [C.CExpr]
 allCExprs = listify (const True)
 
 
+fromCDecl :: C.CDecl -> Decl
+fromCDecl (C.CDecl declSpecs tups _) = undefined
+
+
+fromCCompoundBlock :: C.CBlockItem -> Either Stmt Decl
+fromCCompoundBlock = undefined
+
+
+-- | Convert a C statement into a generic statement
+fromCStmt :: C.CStat -> Stmt
+fromCStmt n@(C.CLabel ident stmt attrs _) = Label (C.identToString ident)
+                                                  (fromCStmt stmt)
+                                                  (makeNodeInfo n)
+fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr e1)
+                                       (fromCStmt s1)
+                                       (makeNodeInfo n)
+fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (makeNodeInfo n)
+fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (makeNodeInfo n)
+fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr e1)
+                                       (fromCStmt s1)
+                                       (fmap fromCStmt ms1)
+                                       (makeNodeInfo n)
+fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
+                                           (fromCStmt s1)
+                                           (makeNodeInfo n)
+fromCStmt n@(C.CCompound localLabels blockItems _) = undefined
+fromCStmt n = UnkStmt (gshow n) (makeNodeInfo n)
+
+
+fromCFunctionDef :: C.CFunDef -> Decl
+fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) = Function name stmt' node
+  where name  = Nothing
+        stmt' = fromCStmt stmt
+        node  = makeNodeInfo n
+
+
+fromCExtDecl :: C.CExtDecl -> Decl
+fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d
+--fromCExtDecl (C.CDeclExt d) = fromCDecl d
+fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
+
+
+fromCTranslUnit :: C.CTranslUnit -> Module
+fromCTranslUnit n@(C.CTranslUnit extDecls _) = Module (map fromCExtDecl extDecls)
+                                                      (makeNodeInfo n)
+
+
 -- Takes a FilePath string and returns a generic AST, annotated with NodeInfo
 -- from the C expressions.
-parse :: FilePath -> [String] -> IO (Either String Ast)
+parse :: FilePath -> [String] -> IO (Either String Project)
 parse file incs = do
   let gcc = newGCC "gcc"
   parsedC <- C.parseCFile gcc Nothing incs file
@@ -99,6 +143,6 @@ parse file incs = do
     Left txt        -> return $ Left $ show txt
     Right transUnit -> do
       let all = allCExprs transUnit
-      let exprs = map fromCExpr' all
-      return $ Right $ Ast exprs
+      let exprs = map fromCExpr all
+      return $ Right $ Project [fromCTranslUnit transUnit]
 
