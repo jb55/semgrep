@@ -40,7 +40,7 @@ getParser f opts
 
 
 process file = do
-  let maybeParsed = (getParser file []) <*> Just file
+  let maybeParsed = do { p <- getParser file []; return $ p file }
   case maybeParsed of
     Nothing -> print $ "No parser found for " ++ file
     Just e  -> do
