@@ -114,7 +114,7 @@ data Decl = Class [Decl] Annotation
           | UnkDecl String Annotation
           deriving (Show, Typeable, Data)
 
-data Module = Module [Decl] Annotation
+data Module = Module [Stmt] Annotation
             deriving (Show, Typeable, Data)
 
 data Project = Project [Module]
@@ -142,10 +142,16 @@ instance Named Expr where
   name (FunApp {})         = "Function Call"
   name (UnkExpr {})        = "Unknown Expression"
 
+instance Named Decl where
+  name (Class {})          = "Class"
+  name (DataDecl {})       = "Data"
+  name (Function {})       = "Function"
+  name (UnkDecl {})        = "Unknown Declaration"
+
 instance Named Stmt where
   name (ExprStmt {})        = "Expression Statement"
   name (Label {})           = "Label"
-  name (DeclStmt {})        = "Declaration Statement"
+  name (DeclStmt decl)      = "Declaration Statement (" ++ name decl ++ ")"
   name (CaseStmt {})        = "Case"
   name (CaseStmtDefault {}) = "Default Case"
   name (IfStmt {})          = "If"

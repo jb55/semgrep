@@ -151,7 +151,7 @@ fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
 
 fromCTranslUnit :: C.CTranslUnit -> Module
 fromCTranslUnit n@(C.CTranslUnit extDecls _) =
-  Module (map fromCExtDecl extDecls) (makeNodeInfo n)
+  Module (map (DeclStmt . fromCExtDecl) extDecls) (makeNodeInfo n)
 
 
 -- Takes a FilePath string and returns a generic AST, annotated with NodeInfo
@@ -163,8 +163,5 @@ parse file incs = do
 
   case parsedC of
     Left txt        -> return $ Left $ show txt
-    Right transUnit -> do
-      let all = allCExprs transUnit
-      let exprs = map fromCExpr all
-      return $ Right $ Project [fromCTranslUnit transUnit]
+    Right transUnit -> return $ Right $ Project [fromCTranslUnit transUnit]
 
