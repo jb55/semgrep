@@ -42,17 +42,19 @@ process file = do
       case parsed of
         Left msg  -> print msg
         Right project -> do
-          let all = exprs project
-          let conds = conditions all
-          let calls' = calls all
+          let allExprs = exprs project
+          let allStmts = filter (not . isCompound) $ stmts project
+          let conds = conditions allExprs
+          let calls' = calls allExprs
 
           putStrLn "\nAll Expressions"
-          mapM_ print (map info all)
+          mapM_ (putStrLn . namedInfo) allExprs
           putStrLn "\nConditional Expressions"
-          mapM_ print (map info conds)
+          mapM_ (putStrLn . namedInfo) conds
           putStrLn "\nFunction Calls"
-          mapM_ print (map info calls')
-
+          mapM_ (putStrLn . namedInfo) calls'
+          putStrLn "\nAll Statements"
+          mapM_ (putStrLn . namedInfo) allStmts
 
     --    putStrLn (show project)
     --    putStrLn "\nIf Statements"

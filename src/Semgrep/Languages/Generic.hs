@@ -27,13 +27,19 @@ instance Show Position where
 
 instance Show NodeInfo where
   show (NodeInfo p s) =
-    "NodeInfo " ++ show p ++ maybe "" (\x -> " \"" ++ x ++ "\"") s
+    "NodeInfo " ++ try' p ++ maybe "" (\x -> " \"" ++ x ++ "\"") s
 
 data NodeInfo = NodeInfo (Maybe Position) (Maybe String)
               deriving (Data, Typeable)
 
+class Named a where
+  name :: a -> String
+
 class MaybeInfo a where
   info :: a -> Maybe NodeInfo
+
+class Unknown a where
+  unk :: a -> Maybe String
 
 class MaybePos a where
   posOf :: a -> Maybe Position
@@ -114,6 +120,50 @@ data Module = Module [Decl] Annotation
 data Project = Project [Module]
              deriving (Show, Typeable, Data)
 
+instance Unknown Expr where
+  unk (UnkExpr s _) = Just s
+  unk _             = Nothing
+
+instance Unknown Decl where
+  unk (UnkDecl s _) = Just s
+  unk _             = Nothing
+
+instance Unknown Stmt where
+  unk (DeclStmt decl)      = unk decl
+  unk (UnkStmt s _)        = Just s
+  unk _                    = Nothing
+
+instance Named Expr where
+  name (Var {})            = "Variable"
+  name (ConstVal {})       = "Constant Value"
+  name (BinaryOp {})       = "Binary Operator"
+  name (Assign {})         = "Assignment"
+  name (ConditionalOp {})  = "Conditional Operator"
+  name (FunApp {})         = "Function Call"
+  name (UnkExpr {})        = "Unknown Expression"
+
+instance Named Stmt where
+  name (ExprStmt {})        = "Expression Statement"
+  name (Label {})           = "Label"
+  name (DeclStmt {})        = "Declaration Statement"
+  name (CaseStmt {})        = "Case"
+  name (CaseStmtDefault {}) = "Default Case"
+  name (IfStmt {})          = "If"
+  name (SwitchStmt {})      = "Switch"
+  name (CompoundStmts {})   = "Compound"
+  name (UnkStmt {})         = "Unknown Statement"
+
+instance MaybeInfo Stmt where
+  info (ExprStmt _ n)       = n
+  info (Label _ _ n)        = n
+  info (DeclStmt decl)      = info decl
+  info (CaseStmt _ _ n)     = n
+  info (CaseStmtDefault _ n) = n
+  info (IfStmt _ _ _ n)     = n
+  info (SwitchStmt _ _ n)   = n
+  info (CompoundStmts _ n)  = n
+  info (UnkStmt _ n)        = n
+
 instance MaybeInfo Expr where
   info (Var _ n)            = n
   info (ConstVal _ n)       = n
@@ -153,6 +203,13 @@ isFunctionCall :: Expr -> Bool
 isFunctionCall (FunApp {}) = True
 isFunctionCall _          = False
 
+isCompound :: Stmt -> Bool
+isCompound (CompoundStmts {}) = True
+isCompound _ = False
+
+stmts :: Project -> [Stmt]
+stmts = listify (const True)
+
 exprs :: Project -> [Expr]
 exprs = listify (const True)
 
@@ -161,3 +218,21 @@ calls = filter isFunctionCall
 
 conditions :: [Expr] -> [Expr]
 conditions = filter isCondExpr
+
+infos :: (MaybeInfo a) => [a] -> [NodeInfo]
+infos ms = [a | Just a <- map info ms]
+
+unks :: (Unknown a) => [a] -> [String]
+unks unks = [a | Just a <- map unk unks]
+
+namedInfo :: (Named a, MaybeInfo a, Unknown a) => a -> String
+namedInfo a =
+  let n  = name a
+      i  = info a
+      u  = unk a
+      mu = maybe "" (\x -> " (" ++ x ++ ")") u
+  in maybe ("No NodeInfo for " ++ n ++ mu) id $ do
+    NodeInfo mPos mPretty <- i
+    let ps = maybe "" (\pos -> show pos ++ " ") mPos
+    let pr = maybe "" (\pr  -> ": \"" ++ pr ++ "\"") mPretty
+    return $ ps ++ n ++ pr
