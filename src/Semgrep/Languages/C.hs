@@ -33,15 +33,15 @@ fromCBinOp o        = UnkOp (gshow o)
 
 -- Converts a C const value to a generic const value
 fromCConst :: C.CConst -> ConstVal
-fromCConst (C.CIntConst cint _)         = IntConst (fromInteger $ C.getCInteger cint)
-fromCConst (C.CCharConst cchar _)       = CharConst (head $ C.getCChar cchar)
+fromCConst (C.CIntConst cint _)  = IntConst (fromInteger $ C.getCInteger cint)
+fromCConst (C.CCharConst cchar _) = CharConst (head $ C.getCChar cchar)
 fromCConst (C.CFloatConst (C.CFloat s) _) = FloatConst (read s)
-fromCConst (C.CStrConst cstring _)      = StringConst (C.getCString cstring)
+fromCConst (C.CStrConst cstring _) = StringConst (C.getCString cstring)
 
 
 -- Converts a C expression to a generic expression
 fromCExpr :: C.CExpr -> Expr
-fromCExpr n@(C.CVar ident _)       = Var (C.identToString ident) (makeNodeInfo n)
+fromCExpr n@(C.CVar ident _) = Var (C.identToString ident) (makeNodeInfo n)
 fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                           (fromCExpr e1)
                                           (fromCExpr e2)
@@ -86,11 +86,13 @@ allCExprs = listify (const True)
 
 
 fromCDecl :: C.CDecl -> Decl
-fromCDecl (C.CDecl declSpecs tups _) = undefined
+fromCDecl (C.CDecl {}) = UnkDecl "not implemented" Nothing
 
 
 fromCCompoundBlock :: C.CBlockItem -> Either Stmt Decl
-fromCCompoundBlock = undefined
+fromCCompoundBlock (C.CBlockStmt stmt) = Left $ fromCStmt stmt
+fromCCompoundBlock (C.CBlockDecl decl) = Right $ fromCDecl decl
+fromCCompoundBlock (C.CNestedFunDef funDef) = Right $ fromCFunctionDef funDef
 
 
 -- | Convert a C statement into a generic statement
@@ -98,38 +100,50 @@ fromCStmt :: C.CStat -> Stmt
 fromCStmt n@(C.CLabel ident stmt attrs _) = Label (C.identToString ident)
                                                   (fromCStmt stmt)
                                                   (makeNodeInfo n)
+
 fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr e1)
-                                       (fromCStmt s1)
-                                       (makeNodeInfo n)
+                                         (fromCStmt s1)
+                                         (makeNodeInfo n)
+
 fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (makeNodeInfo n)
+
 fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (makeNodeInfo n)
+
 fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr e1)
-                                       (fromCStmt s1)
-                                       (fmap fromCStmt ms1)
-                                       (makeNodeInfo n)
+                                         (fromCStmt s1)
+                                         (fmap fromCStmt ms1)
+                                         (makeNodeInfo n)
+
 fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
-                                           (fromCStmt s1)
-                                           (makeNodeInfo n)
-fromCStmt n@(C.CCompound localLabels blockItems _) = undefined
+                                             (fromCStmt s1)
+                                             (makeNodeInfo n)
+
+fromCStmt n@(C.CCompound localLabels blockItems _) =
+  let converted = map (stmtOrDecl . fromCCompoundBlock) blockItems
+  in CompoundStmts converted (makeNodeInfo n)
+    where
+      stmtOrDecl (Left stmt) = stmt
+      stmtOrDecl (Right decl)  = DeclStmt decl
+
 fromCStmt n = UnkStmt (gshow n) (makeNodeInfo n)
 
 
 fromCFunctionDef :: C.CFunDef -> Decl
-fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) = Function name stmt' node
-  where name  = Nothing
-        stmt' = fromCStmt stmt
-        node  = makeNodeInfo n
-
+fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
+  let name  = Nothing
+      stmt' = fromCStmt stmt
+      node  = makeNodeInfo n
+  in Function name stmt' node
 
 fromCExtDecl :: C.CExtDecl -> Decl
 fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d
---fromCExtDecl (C.CDeclExt d) = fromCDecl d
+fromCExtDecl (C.CDeclExt d) = fromCDecl d
 fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
 
 
 fromCTranslUnit :: C.CTranslUnit -> Module
-fromCTranslUnit n@(C.CTranslUnit extDecls _) = Module (map fromCExtDecl extDecls)
-                                                      (makeNodeInfo n)
+fromCTranslUnit n@(C.CTranslUnit extDecls _) =
+  Module (map fromCExtDecl extDecls) (makeNodeInfo n)
 
 
 -- Takes a FilePath string and returns a generic AST, annotated with NodeInfo

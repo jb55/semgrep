@@ -54,6 +54,7 @@ instance MaybeInfo (Maybe NodeInfo) where
 
 type Annotation = Maybe NodeInfo
 
+
 data BinOp = LeOp
            | GrOp
            | LeqOp
@@ -90,10 +91,12 @@ data Type = Type String
 
 data Stmt = ExprStmt (Maybe Expr) Annotation
           | Label String Stmt Annotation
+          | DeclStmt Decl
           | CaseStmt Expr Stmt Annotation
           | CaseStmtDefault Stmt Annotation
           | IfStmt Expr Stmt (Maybe Stmt) Annotation
           | SwitchStmt Expr Stmt Annotation
+          | CompoundStmts [Stmt] Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
@@ -116,7 +119,7 @@ instance MaybeInfo Expr where
   info (BinaryOp _ _ _ n)   = n
   info (Assign _ _ _ n)     = n
   info (ConditionalOp _ _ _ n) = n
-  info (UnkExpr _ n)     = n
+  info (UnkExpr _ n)           = n
 
 instance MaybeInfo Decl where
   info (Class _ n)    = n
@@ -126,7 +129,6 @@ instance MaybeInfo Decl where
 
 instance MaybeInfo Module where
   info (Module _ n) = n
-
 
 type LanguageParser = FilePath -> IO (Either String Project)
 
@@ -151,5 +153,3 @@ exprs = listify (const True)
 
 conditions :: [Expr] -> [Expr]
 conditions = filter isCondExpr
-
-

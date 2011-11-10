@@ -36,7 +36,9 @@ fromSpan n _                         = Nothing
 
 
 -- Get NodeInfo out of an annotated Python node
-fromPyAnnotation :: (Pretty (n SrcSpan), P.Annotated n) => n SrcSpan -> Maybe NodeInfo
+fromPyAnnotation :: (Pretty (n SrcSpan), P.Annotated n)
+                 => n SrcSpan
+                 -> Maybe NodeInfo
 fromPyAnnotation n = fromSpan n (P.annot n)
 
 
