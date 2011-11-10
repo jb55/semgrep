@@ -33,8 +33,8 @@ getParser f opts
 
 
 
-process file = do
-  let maybeParsed = do { p <- getParser file []; return $ p file }
+process file includes = do
+  let maybeParsed = do { p <- getParser file includes; return $ p file }
   case maybeParsed of
     Nothing -> print $ "No parser found for " ++ file
     Just e  -> do
@@ -43,7 +43,7 @@ process file = do
         Left msg  -> print msg
         Right project -> do
           let allExprs = exprs project
-          let allStmts = filter (not . isCompound) $ stmts project
+          let allStmts = filter (not . isDullStmt) $ stmts project
           let conds = conditions allExprs
           let calls' = calls allExprs
 
@@ -61,5 +61,5 @@ process file = do
     --    mapM_ prettyPrint ifs
 
 main = do
-  [file] <- getArgs
-  process file
+  file:args <- getArgs
+  process file (map Include args)

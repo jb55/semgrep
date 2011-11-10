@@ -201,11 +201,19 @@ isCondExpr _                        = False
 
 isFunctionCall :: Expr -> Bool
 isFunctionCall (FunApp {}) = True
-isFunctionCall _          = False
+isFunctionCall _           = False
 
 isCompound :: Stmt -> Bool
 isCompound (CompoundStmts {}) = True
-isCompound _ = False
+isCompound _                  = False
+
+isExpressionStmt :: Stmt -> Bool
+isExpressionStmt (ExprStmt {}) = True
+isExpressionStmt _             = False
+
+isDullStmt :: Stmt -> Bool
+isDullStmt stmt = or $ map ($stmt) dulls
+  where dulls = [isExpressionStmt, isCompound]
 
 stmts :: Project -> [Stmt]
 stmts = listify (const True)
