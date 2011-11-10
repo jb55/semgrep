@@ -4,6 +4,7 @@
 module Semgrep.Languages.Generic where
 
 import           Data.Generics
+import           Data.Maybe
 import           Semgrep
 
 
@@ -103,7 +104,7 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | CaseStmtDefault Stmt Annotation
           | IfStmt Expr Stmt (Maybe Stmt) Annotation
           | SwitchStmt Expr Stmt Annotation
-          | CompoundStmts [Stmt] Annotation
+          | Block [Stmt] Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
@@ -156,7 +157,7 @@ instance Named Stmt where
   name (CaseStmtDefault {}) = "Default Case"
   name (IfStmt {})          = "If"
   name (SwitchStmt {})      = "Switch"
-  name (CompoundStmts {})   = "Compound"
+  name (Block {})           = "Block"
   name (UnkStmt {})         = "Unknown Statement"
 
 instance MaybeInfo Stmt where
@@ -167,7 +168,7 @@ instance MaybeInfo Stmt where
   info (CaseStmtDefault _ n) = n
   info (IfStmt _ _ _ n)     = n
   info (SwitchStmt _ _ n)   = n
-  info (CompoundStmts _ n)  = n
+  info (Block _ n)  = n
   info (UnkStmt _ n)        = n
 
 instance MaybeInfo Expr where
@@ -210,7 +211,7 @@ isFunctionCall (FunApp {}) = True
 isFunctionCall _           = False
 
 isCompound :: Stmt -> Bool
-isCompound (CompoundStmts {}) = True
+isCompound (Block {}) = True
 isCompound _                  = False
 
 isExpressionStmt :: Stmt -> Bool
@@ -232,6 +233,8 @@ calls = filter isFunctionCall
 
 conditions :: [Expr] -> [Expr]
 conditions = filter isCondExpr
+
+isUnk = isJust . unk
 
 infos :: (MaybeInfo a) => [a] -> [NodeInfo]
 infos ms = [a | Just a <- map info ms]

@@ -9,7 +9,9 @@ import           Language.Python.Version3.Parser as P3
 import           Language.Python.Common.Pretty
 import           Language.Python.Common.PrettyAST
 import           Semgrep.Languages.Generic
+import           Control.Monad
 import           Data.Generics
+import           Data.Maybe
 import           System.IO
 import           Semgrep ( PythonVersion(..)
                          )
@@ -54,15 +56,40 @@ fromPyExpr o@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
                                                 (fromPyAnnotation o)
 fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 
+
+-- | Convert Python if/elif to generic if statement
+fromPyIfGuard :: (PyExpr, [PyStmt]) -> Stmt
+fromPyIfGuard (expr, stmts) =
+  IfStmt (fromPyExpr expr)
+         (Block (map fromPyStmt stmts) Nothing)
+         Nothing
+         Nothing
+
+fromPyIf :: Maybe PyStmt -> [(PyExpr, [PyStmt])] -> Maybe Stmt -> Maybe Stmt
+fromPyIf cond [] el     = el
+fromPyIf cond (t:ts) el =
+  let (IfStmt e cs _ _) = fromPyIfGuard t
+  in Just $ IfStmt e cs (fromPyIf Nothing ts el)
+                        (join $ fmap fromPyAnnotation cond)
+
+-- | Convert a Python statement into a generic statement
 fromPyStmt :: PyStmt -> Stmt
 fromPyStmt n@(P.Fun name args result body a) =
   let ann = fromPyAnnotation n
   in DeclStmt $ Function (Just . P.ident_string $ name)
-                         (CompoundStmts (map fromPyStmt body) ann)
+                         (Block (map fromPyStmt body) ann)
                          ann
 
+fromPyStmt n@(P.Conditional guards el a) =
+  let maybeElse = case el of
+                    [] -> Nothing
+                    el -> Just $ Block (map fromPyStmt el) Nothing
+  in case fromPyIf (Just n) guards maybeElse of
+       Nothing  -> error "empty conditional"
+       Just iff -> iff
+
 fromPyStmt n = UnkStmt (show $ pretty n) (fromPyAnnotation n)
-  
+
 -- | Convert a Python module to a generic module
 fromPyModule :: PyModule -> Module
 fromPyModule a@(P.Module stmts) = Module (map fromPyStmt stmts) Nothing

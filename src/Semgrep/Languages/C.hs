@@ -128,7 +128,7 @@ fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
 
 fromCStmt n@(C.CCompound localLabels blockItems _) =
   let converted = map (stmtOrDecl . fromCCompoundBlock) blockItems
-  in CompoundStmts converted (makeNodeInfo n)
+  in Block converted (makeNodeInfo n)
     where
       stmtOrDecl (Left stmt) = stmt
       stmtOrDecl (Right decl)  = DeclStmt decl
