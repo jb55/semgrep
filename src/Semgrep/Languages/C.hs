@@ -42,19 +42,27 @@ fromCConst (C.CStrConst cstring _) = StringConst (C.getCString cstring)
 -- Converts a C expression to a generic expression
 fromCExpr :: C.CExpr -> Expr
 fromCExpr n@(C.CVar ident _) = Var (C.identToString ident) (makeNodeInfo n)
+
 fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                           (fromCExpr e1)
                                           (fromCExpr e2)
                                           (makeNodeInfo n)
+
 fromCExpr n@(C.CConst c)           = ConstVal (fromCConst c) (makeNodeInfo n)
+
 fromCExpr n@(C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
                                                  (fromCExpr e3)
                                                  (makeNodeInfo n)
+
 fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
                                               (fromCExpr e1)
                                               (fromCExpr e2)
                                               (makeNodeInfo n)
+
+fromCExpr n@(C.CCall expr exprs _) = FunApp (fromCExpr expr)
+                                            (map fromCExpr exprs)
+                                            (makeNodeInfo n)
 
 fromCExpr e = UnkExpr (gshow e) (makeNodeInfo e)
 

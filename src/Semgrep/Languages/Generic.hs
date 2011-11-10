@@ -82,6 +82,7 @@ data Expr = Var String Annotation
           | BinaryOp BinOp Expr Expr Annotation
           | Assign AssignOp Expr Expr Annotation
           | ConditionalOp Expr (Maybe Expr) Expr Annotation
+          | FunApp Expr [Expr] Annotation
           | UnkExpr String Annotation
        -- | CaseExpr
           deriving (Show, Typeable, Data)
@@ -119,7 +120,8 @@ instance MaybeInfo Expr where
   info (BinaryOp _ _ _ n)   = n
   info (Assign _ _ _ n)     = n
   info (ConditionalOp _ _ _ n) = n
-  info (UnkExpr _ n)           = n
+  info (FunApp _ _ n)       = n
+  info (UnkExpr _ n)        = n
 
 instance MaybeInfo Decl where
   info (Class _ n)    = n
@@ -145,11 +147,17 @@ isCondOp _      = False
 isCondExpr :: Expr -> Bool
 isCondExpr (ConditionalOp op _ _ _) = True
 isCondExpr (BinaryOp op _ _ _)      = isCondOp op
-isCondExpr _                       = False
+isCondExpr _                        = False
 
+isFunctionCall :: Expr -> Bool
+isFunctionCall (FunApp {}) = True
+isFunctionCall _          = False
 
 exprs :: Project -> [Expr]
 exprs = listify (const True)
+
+calls :: [Expr] -> [Expr]
+calls = filter isFunctionCall
 
 conditions :: [Expr] -> [Expr]
 conditions = filter isCondExpr

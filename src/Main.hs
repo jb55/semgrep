@@ -44,11 +44,14 @@ process file = do
         Right project -> do
           let all = exprs project
           let conds = conditions all
+          let calls' = calls all
 
           putStrLn "\nAll Expressions"
           mapM_ print (map info all)
           putStrLn "\nConditional Expressions"
           mapM_ print (map info conds)
+          putStrLn "\nFunction Calls"
+          mapM_ print (map info calls')
 
 
     --    putStrLn (show project)
