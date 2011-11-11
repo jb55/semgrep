@@ -163,15 +163,15 @@ instance Named LiteralValue where
   name _                     = "Unknown"
 
 instance Named Expr where
-  name (Var {})            = "Variable"
-  name (CompoundExpr {})   = "Compound Expression"
-  name (LiteralValue c _ _ )   = "Constant Value (" ++ name c ++ ")"
-  name (BinaryOp {})       = "Binary Operator"
-  name (Assign {})         = "Assignment"
+  name (Var {})                 = "Variable"
+  name (CompoundExpr {})        = "Compound Expression"
+  name (LiteralValue c _ _ )    = "Constant Value (" ++ name c ++ ")"
+  name (BinaryOp {})            = "Binary Operation"
+  name (Assign {})              = "Assignment"
   name (DestructuringAssign {}) = "DestructuringAssignment"
-  name (ConditionalOp {})  = "Conditional Operator"
-  name (FunApp {})         = "Function Call"
-  name (UnkExpr {})        = "Unknown Expression"
+  name (ConditionalOp {})       = "Conditional Operator"
+  name (FunApp {})              = "Function Call"
+  name (UnkExpr {})             = "Unknown Expression"
 
 instance Named Decl where
   name (Class {})          = "Class"
@@ -247,14 +247,13 @@ stringLit _ = Nothing
 
 fromCompoundedStrings :: Expr -> Maybe Expr
 fromCompoundedStrings (CompoundExpr [] _)  = Nothing
-fromCompoundedStrings (CompoundExpr [a] _) = Just a
-fromCompoundedStrings (CompoundExpr (e1:es) _) = foldM joinTwo e1 es
+fromCompoundedStrings (CompoundExpr (e1:es) a) = foldM joinTwo e1 es
   where
     joinTwo :: Expr -> Expr -> Maybe Expr
     joinTwo l1@(LiteralValue s1 m1 a1) l2@(LiteralValue s2 m2 a2) = do
       str1 <- stringLit l1
       str2 <- stringLit l2
-      return $ LiteralValue (StringLiteral $ str1 ++ str2) m1 a1
+      return $ LiteralValue (StringLiteral $ str1 ++ str2) m1 a
     joinTwo _ _ = Nothing
 
 

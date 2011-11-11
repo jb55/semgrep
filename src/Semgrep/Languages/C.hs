@@ -9,7 +9,7 @@ import qualified Language.C as C
 import           Language.C.System.GCC(newGCC)
 import           Semgrep.Languages.Generic
 import           Data.Generics
-import           Semgrep
+import           Semgrep()
 
 
 -- Converts a C assignment operator to a generic one

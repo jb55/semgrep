@@ -60,13 +60,13 @@ fromPyExpr n@(P.Var ident _) = Var (P.ident_string ident)
                                    (fromPyAnnotation n)
 
 fromPyExpr n@(P.Int val lit _) = LiteralValue (IntLiteral $ fromInteger val)
-                                          (Just lit)
-                                          (fromPyAnnotation n)
+                                              (Just lit)
+                                              (fromPyAnnotation n)
 
 fromPyExpr n@(P.Strings strs _) =
   let stringConsts   = map StringLiteral strs
       ann            = fromPyAnnotation n
-      makeLiteralValue c = LiteralValue c Nothing ann
+      makeLiteralValue c = LiteralValue c Nothing Nothing
       compoundExpr   = CompoundExpr (map makeLiteralValue stringConsts) ann
   in case fromCompoundedStrings compoundExpr of
     Nothing -> compoundExpr
