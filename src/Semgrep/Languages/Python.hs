@@ -7,19 +7,20 @@ import           Language.Python.Common.SrcLocation
 import           Language.Python.Version2.Parser as P2
 import           Language.Python.Version3.Parser as P3
 import           Language.Python.Common.Pretty
-import           Language.Python.Common.PrettyAST
+import           Language.Python.Common.PrettyAST()
 import           Semgrep.Languages.Generic
 import           Control.Monad
 import           Data.Generics
-import           Data.Maybe
+import           Data.Maybe(maybeToList)
 import           System.IO
 import           Semgrep ( PythonVersion(..)
                          )
 
 type PyAnno = SrcSpan
-type PyStmt = P.Statement PyAnno
-type PyExpr = P.Expr PyAnno
-type PyModule = P.Module PyAnno
+type PyStmt     = P.Statement PyAnno
+type PyAssignOp = P.AssignOp PyAnno
+type PyExpr     = P.Expr PyAnno
+type PyModule   = P.Module PyAnno
 
 fromPyOp :: P.Op anno -> BinOp
 fromPyOp (P.LessThan _)    = LeOp
@@ -50,10 +51,27 @@ fromPyAnnotation n = fromSpan n (P.annot n)
 
 -- | Convert a Python expression into a generic expression
 fromPyExpr :: PyExpr -> Expr
-fromPyExpr o@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
+fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
                                                 (fromPyExpr e1)
                                                 (fromPyExpr e2)
-                                                (fromPyAnnotation o)
+                                                (fromPyAnnotation n)
+
+fromPyExpr n@(P.Var ident _) = Var (P.ident_string ident)
+                                   (fromPyAnnotation n)
+
+fromPyExpr n@(P.Int val lit _) = LiteralValue (IntLiteral $ fromInteger val)
+                                          (Just lit)
+                                          (fromPyAnnotation n)
+
+fromPyExpr n@(P.Strings strs _) =
+  let stringConsts   = map StringLiteral strs
+      ann            = fromPyAnnotation n
+      makeLiteralValue c = LiteralValue c Nothing ann
+      compoundExpr   = CompoundExpr (map makeLiteralValue stringConsts) ann
+  in case fromCompoundedStrings compoundExpr of
+    Nothing -> compoundExpr
+    Just x  -> x
+
 fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 
 
@@ -88,12 +106,14 @@ fromPyIf cond (t:ts) el =
 
 -- | Convert a Python statement into a generic statement
 fromPyStmt :: PyStmt -> Stmt
-fromPyStmt n@(P.Fun name args result body a) =
+fromPyStmt n@(P.Fun name' args result body _) =
   let ann = fromPyAnnotation n
-  in DeclStmt $ Function (Just . P.ident_string $ name)
+  in DeclStmt $ Function (maybeToList $ fmap (Result . fromPyExpr) result)
+                         (Just $ P.ident_string name')
                          (toBlock body ann)
                          ann
 
+-- | Conditional if/elif/el statements
 fromPyStmt n@(P.Conditional ifs el a) =
   let maybeElse = case el of
                     [] -> Nothing
@@ -102,7 +122,51 @@ fromPyStmt n@(P.Conditional ifs el a) =
        Nothing  -> error "empty conditional"
        Just iff -> iff
 
+-- | Expression statements
+fromPyStmt n@(P.StmtExpr expr _) = ExprStmt (Just $ fromPyExpr expr)
+                                            (fromPyAnnotation n)
+-- | Assignment statements
+fromPyStmt n@(P.Assign exprs exprFrom _) =
+  let ann       = fromPyAnnotation n
+      exprFrom' = fromPyExpr exprFrom
+  in case exprs of
+    []  -> error "empty assign"
+    [a] -> toSimpleExprStmt $ Assign DefaultAssign
+                                     (fromPyExpr a)
+                                     exprFrom'
+                                     ann
+    _   -> toSimpleExprStmt $ DestructuringAssign (map fromPyExpr exprs)
+                                                  exprFrom'
+                                                  ann
+-- | Augmented Assignment statements (eg. +=, -=, etc)
+fromPyStmt n@(P.AugmentedAssign e1 op e2 _) =
+  toSimpleExprStmt $ Assign (fromPyAssignOp op)
+                            (fromPyExpr e1)
+                            (fromPyExpr e2)
+                            (fromPyAnnotation n)
+
+-- | Unknown Statement
 fromPyStmt n = UnkStmt (show $ pretty n) (fromPyAnnotation n)
+
+toSimpleExprStmt :: Expr -> Stmt
+toSimpleExprStmt a = ExprStmt (Just a) Nothing
+
+fromPyAssignOp :: PyAssignOp -> AssignOp
+fromPyAssignOp (P.PlusAssign _)       = PlusAssign
+fromPyAssignOp (P.DivAssign _)        = DivAssign
+fromPyAssignOp (P.MultAssign _)       = MulAssign
+fromPyAssignOp (P.PlusAssign _)       = PlusAssign
+fromPyAssignOp (P.MinusAssign _)      = MinusAssign
+fromPyAssignOp (P.ModAssign _)        = ModAssign
+fromPyAssignOp (P.PowAssign _)        = PowAssign
+fromPyAssignOp (P.BinAndAssign _)     = BinAndAssign
+fromPyAssignOp (P.BinOrAssign _)      = BinOrAssign
+fromPyAssignOp (P.BinXorAssign _)     = BinXorAssign
+fromPyAssignOp (P.LeftShiftAssign _)  = LeftShiftAssign
+fromPyAssignOp (P.RightShiftAssign _) = RightShiftAssign
+fromPyAssignOp (P.FloorDivAssign _)   = FloorDivAssign
+fromPyAssignOp n                    = UnkAssign (show n)
+
 
 -- | Convert a Python module to a generic module
 fromPyModule :: PyModule -> Module

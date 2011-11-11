@@ -4,7 +4,8 @@
 module Semgrep.Languages.Generic where
 
 import           Data.Generics
-import           Data.Maybe
+import           Data.Maybe(isJust)
+import           Control.Monad(foldM)
 import           Semgrep
 
 
@@ -21,6 +22,12 @@ try' = maybe "??" show
 
 try :: Maybe String -> String -> String
 try m s = maybe s id m
+
+addParens :: (a -> String) -> Maybe a -> String
+addParens f = maybe "" (\x -> " (" ++ f x ++ ")")
+
+addParens' :: Maybe String -> String
+addParens' = addParens id
 
 instance Show Position where
   show (Position o f l c) =
@@ -72,22 +79,34 @@ data BinOp = LeOp
            | UnkOp String
            deriving (Show, Typeable, Data, Eq)
 
-data AssignOp = AssignOp
-              | MulAssignOp
-              | DivAssignOp
-              | UnkAssignOp String
+data AssignOp = DefaultAssign
+              | DivAssign
+              | MulAssign
+              | PlusAssign
+              | MinusAssign
+              | ModAssign
+              | PowAssign
+              | BinAndAssign
+              | BinOrAssign
+              | BinXorAssign
+              | LeftShiftAssign
+              | RightShiftAssign
+              | FloorDivAssign
+              | UnkAssign String
               deriving (Show, Typeable, Data, Eq)
 
-data ConstVal = IntConst Int
-              | CharConst Char
-              | FloatConst Float
-              | StringConst String
+data LiteralValue = IntLiteral Int
+              | CharLiteral Char
+              | FloatLiteral Float
+              | StringLiteral String
               deriving (Show, Typeable, Data, Eq)
 
 data Expr = Var String Annotation
-          | ConstVal ConstVal Annotation
+          | CompoundExpr [Expr] Annotation
+          | LiteralValue LiteralValue (Maybe String) Annotation
           | BinaryOp BinOp Expr Expr Annotation
           | Assign AssignOp Expr Expr Annotation
+          | DestructuringAssign [Expr] Expr Annotation
           | ConditionalOp Expr (Maybe Expr) Expr Annotation
           | FunApp Expr [Expr] Annotation
           | UnkExpr String Annotation
@@ -108,10 +127,12 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
+data DeclProp = Result Expr
+              deriving (Show, Typeable, Data)
 
 data Decl = Class [Decl] Annotation
           | DataDecl (Maybe Type) Annotation
-          | Function (Maybe String) Stmt Annotation
+          | Function [DeclProp] (Maybe String) Stmt Annotation
           | UnkDecl String Annotation
           deriving (Show, Typeable, Data)
 
@@ -134,11 +155,20 @@ instance Unknown Stmt where
   unk (UnkStmt s _)        = Just s
   unk _                    = Nothing
 
+instance Named LiteralValue where
+  name (IntLiteral {})       = "Integer"
+  name (CharLiteral {})      = "Char"
+  name (FloatLiteral {})     = "Float"
+  name (StringLiteral {})    = "String"
+  name _                     = "Unknown"
+
 instance Named Expr where
   name (Var {})            = "Variable"
-  name (ConstVal {})       = "Constant Value"
+  name (CompoundExpr {})   = "Compound Expression"
+  name (LiteralValue c _ _ )   = "Constant Value (" ++ name c ++ ")"
   name (BinaryOp {})       = "Binary Operator"
   name (Assign {})         = "Assignment"
+  name (DestructuringAssign {}) = "DestructuringAssignment"
   name (ConditionalOp {})  = "Conditional Operator"
   name (FunApp {})         = "Function Call"
   name (UnkExpr {})        = "Unknown Expression"
@@ -150,7 +180,7 @@ instance Named Decl where
   name (UnkDecl {})        = "Unknown Declaration"
 
 instance Named Stmt where
-  name (ExprStmt {})        = "Expression Statement"
+  name (ExprStmt mExpr _)   = "Expression Statement" ++ addParens name mExpr
   name (Label {})           = "Label"
   name (DeclStmt decl)      = "Declaration Statement (" ++ name decl ++ ")"
   name (CaseStmt {})        = "Case"
@@ -173,7 +203,8 @@ instance MaybeInfo Stmt where
 
 instance MaybeInfo Expr where
   info (Var _ n)            = n
-  info (ConstVal _ n)       = n
+  info (CompoundExpr _ n)   = n
+  info (LiteralValue _ _ n)     = n
   info (BinaryOp _ _ _ n)   = n
   info (Assign _ _ _ n)     = n
   info (ConditionalOp _ _ _ n) = n
@@ -183,7 +214,7 @@ instance MaybeInfo Expr where
 instance MaybeInfo Decl where
   info (Class _ n)    = n
   info (DataDecl _ n) = n
-  info (Function _ _ n) = n
+  info (Function _ _ _ n) = n
   info (UnkDecl _ n) = n
 
 instance MaybeInfo Module where
@@ -206,13 +237,34 @@ isCondExpr (ConditionalOp op _ _ _) = True
 isCondExpr (BinaryOp op _ _ _)      = isCondOp op
 isCondExpr _                        = False
 
+isStringLit :: Expr -> Bool
+isStringLit (LiteralValue (StringLiteral {}) _ _) = True
+isStringLit _ = False
+
+stringLit :: Expr -> Maybe String
+stringLit (LiteralValue (StringLiteral s) _ _) = Just s
+stringLit _ = Nothing
+
+fromCompoundedStrings :: Expr -> Maybe Expr
+fromCompoundedStrings (CompoundExpr [] _)  = Nothing
+fromCompoundedStrings (CompoundExpr [a] _) = Just a
+fromCompoundedStrings (CompoundExpr (e1:es) _) = foldM joinTwo e1 es
+  where
+    joinTwo :: Expr -> Expr -> Maybe Expr
+    joinTwo l1@(LiteralValue s1 m1 a1) l2@(LiteralValue s2 m2 a2) = do
+      str1 <- stringLit l1
+      str2 <- stringLit l2
+      return $ LiteralValue (StringLiteral $ str1 ++ str2) m1 a1
+    joinTwo _ _ = Nothing
+
+
 isFunctionCall :: Expr -> Bool
 isFunctionCall (FunApp {}) = True
 isFunctionCall _           = False
 
 isCompound :: Stmt -> Bool
 isCompound (Block {}) = True
-isCompound _                  = False
+isCompound _          = False
 
 isExpressionStmt :: Stmt -> Bool
 isExpressionStmt (ExprStmt {}) = True
@@ -222,11 +274,11 @@ isDullStmt :: Stmt -> Bool
 isDullStmt stmt = or $ map ($stmt) dulls
   where dulls = [isExpressionStmt, isCompound]
 
-stmts :: Project -> [Stmt]
-stmts = listify (const True)
+statements :: Project -> [Stmt]
+statements = listify (const True)
 
-exprs :: Project -> [Expr]
-exprs = listify (const True)
+expressions :: Project -> [Expr]
+expressions = listify (const True)
 
 calls :: [Expr] -> [Expr]
 calls = filter isFunctionCall
@@ -247,7 +299,7 @@ namedInfo a =
   let n  = name a
       i  = info a
       u  = unk a
-      mu = maybe "" (\x -> " (" ++ x ++ ")") u
+      mu = addParens' u
   in maybe ("No NodeInfo for " ++ n ++ mu) id $ do
     NodeInfo mPos mPretty <- i
     let ps = maybe "" (\pos -> show pos ++ " ") mPos

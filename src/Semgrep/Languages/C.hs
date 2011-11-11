@@ -11,12 +11,13 @@ import           Semgrep.Languages.Generic
 import           Data.Generics
 import           Semgrep
 
+
 -- Converts a C assignment operator to a generic one
 fromCAssignOp :: C.CAssignOp -> AssignOp
-fromCAssignOp C.CAssignOp = AssignOp
-fromCAssignOp C.CMulAssOp = MulAssignOp
-fromCAssignOp C.CDivAssOp = DivAssignOp
-fromCAssignOp o = UnkAssignOp (show o)
+fromCAssignOp C.CAssignOp = DefaultAssign
+fromCAssignOp C.CMulAssOp = MulAssign
+fromCAssignOp C.CDivAssOp = DivAssign
+fromCAssignOp o = UnkAssign (show o)
 
 
 -- Converts a C binary operator to a generic one
@@ -32,11 +33,11 @@ fromCBinOp o        = UnkOp (gshow o)
 
 
 -- Converts a C const value to a generic const value
-fromCConst :: C.CConst -> ConstVal
-fromCConst (C.CIntConst cint _)  = IntConst (fromInteger $ C.getCInteger cint)
-fromCConst (C.CCharConst cchar _) = CharConst (head $ C.getCChar cchar)
-fromCConst (C.CFloatConst (C.CFloat s) _) = FloatConst (read s)
-fromCConst (C.CStrConst cstring _) = StringConst (C.getCString cstring)
+fromCConst :: C.CConst -> LiteralValue
+fromCConst (C.CIntConst cint _) = IntLiteral (fromInteger $ C.getCInteger cint)
+fromCConst (C.CCharConst cchar _) = CharLiteral (head $ C.getCChar cchar)
+fromCConst (C.CFloatConst (C.CFloat s) _) = FloatLiteral (read s)
+fromCConst (C.CStrConst cstring _) = StringLiteral (C.getCString cstring)
 
 
 -- Converts a C expression to a generic expression
@@ -48,7 +49,9 @@ fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                           (fromCExpr e2)
                                           (makeNodeInfo n)
 
-fromCExpr n@(C.CConst c)           = ConstVal (fromCConst c) (makeNodeInfo n)
+fromCExpr n@(C.CConst c)           = LiteralValue (fromCConst c)
+                                              Nothing
+                                              (makeNodeInfo n)
 
 fromCExpr n@(C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
@@ -141,7 +144,7 @@ fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
   let name  = Nothing
       stmt' = fromCStmt stmt
       node  = makeNodeInfo n
-  in Function name stmt' node
+  in Function [] name stmt' node
 
 fromCExtDecl :: C.CExtDecl -> Decl
 fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d

@@ -2,8 +2,8 @@
 module Main where
 
 
-import           Control.Monad
-import           Data.Maybe
+import           Control.Monad()
+import           Data.Maybe()
 import qualified Semgrep.Languages.C as C
 import qualified Semgrep.Languages.Python as P
 import           System.Environment
@@ -11,7 +11,6 @@ import           Data.List
 
 import           Semgrep.Languages.Generic
 import           Semgrep
-
 
 
 allIncludes :: [Option] -> [String]
@@ -42,8 +41,8 @@ process file includes = do
       case parsed of
         Left msg  -> print msg
         Right project -> do
-          let allExprs = exprs project
-          let allStmts = filter (not . isDullStmt) $ stmts project
+          let allExprs = expressions project
+          let allStmts = filter (not . isDullStmt) $ statements project
           let conds = conditions allExprs
           let calls' = calls allExprs
 
