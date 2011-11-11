@@ -58,33 +58,47 @@ fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 
 
 -- | Convert Python if/elif to generic if statement
-fromPyIfGuard :: (PyExpr, [PyStmt]) -> Stmt
-fromPyIfGuard (expr, stmts) =
+fromPyElIf :: (PyExpr, [PyStmt]) -> Stmt
+fromPyElIf (expr, stmts) =
   IfStmt (fromPyExpr expr)
-         (Block (map fromPyStmt stmts) Nothing)
+         (toBlock stmts Nothing)
          Nothing
          Nothing
 
+
+toBlock :: [PyStmt] -> Annotation -> Stmt
+toBlock stmts = Block (map fromPyStmt stmts)
+
+
+-- | Convert a list of python if/elif statements into a single generic IfStmt
 fromPyIf :: Maybe PyStmt -> [(PyExpr, [PyStmt])] -> Maybe Stmt -> Maybe Stmt
+-- If our if/elif list is empty, just return the else block (if it exists)
 fromPyIf cond [] el     = el
 fromPyIf cond (t:ts) el =
-  let (IfStmt e cs _ _) = fromPyIfGuard t
+
+  -- Extract one if/elif expression and block statement
+  let (IfStmt e cs _ _) = fromPyElIf t
+
+  -- Build a new if or elif, recursively applying this function
+  -- for further elif/else statements
   in Just $ IfStmt e cs (fromPyIf Nothing ts el)
                         (join $ fmap fromPyAnnotation cond)
+
+
 
 -- | Convert a Python statement into a generic statement
 fromPyStmt :: PyStmt -> Stmt
 fromPyStmt n@(P.Fun name args result body a) =
   let ann = fromPyAnnotation n
   in DeclStmt $ Function (Just . P.ident_string $ name)
-                         (Block (map fromPyStmt body) ann)
+                         (toBlock body ann)
                          ann
 
-fromPyStmt n@(P.Conditional guards el a) =
+fromPyStmt n@(P.Conditional ifs el a) =
   let maybeElse = case el of
                     [] -> Nothing
-                    el -> Just $ Block (map fromPyStmt el) Nothing
-  in case fromPyIf (Just n) guards maybeElse of
+                    el -> Just $ toBlock el Nothing
+  in case fromPyIf (Just n) ifs maybeElse of
        Nothing  -> error "empty conditional"
        Just iff -> iff
 
