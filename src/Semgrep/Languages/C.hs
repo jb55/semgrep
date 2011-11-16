@@ -6,6 +6,7 @@ module Semgrep.Languages.C (
 
 
 import qualified Language.C as C
+import qualified Language.C.Data.Ident as I
 import           Language.C.System.GCC(newGCC)
 import           Semgrep.Languages.Generic
 import           Data.Generics
@@ -45,12 +46,18 @@ fromCConst (C.CCharConst cchar _) = CharLiteral (head $ C.getCChar cchar)
 fromCConst (C.CFloatConst (C.CFloat s) _) = FloatLiteral (read s)
 fromCConst (C.CStrConst cstring _) = StringLiteral (C.getCString cstring)
 
+--------------------------------------------------------------------------------
+-- | Identifiers
+--------------------------------------------------------------------------------
+fromCIdent :: I.Ident -> Identifier
+fromCIdent (I.Ident s i _) = Ident s (Just i) Nothing
 
 --------------------------------------------------------------------------------
 -- | Converts a C expression to a generic expression
 --------------------------------------------------------------------------------
 fromCExpr :: C.CExpr -> Expr
-fromCExpr n@(C.CVar ident _) = Var (C.identToString ident) (makeNodeInfo n)
+fromCExpr n@(C.CVar ident _) = Var (fromCIdent ident) 
+                                   (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Assignment expressions
@@ -58,14 +65,14 @@ fromCExpr n@(C.CVar ident _) = Var (C.identToString ident) (makeNodeInfo n)
 fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                             (fromCExpr e1)
                                             (fromCExpr e2)
-                                            (makeNodeInfo n)
+                                            (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Literal values
 --------------------------------------------------------------------------------
 fromCExpr n@(C.CConst c) = LiteralValue (fromCConst c)
                                         Nothing
-                                        (makeNodeInfo n)
+                                        (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Conditional operations (?:)
@@ -73,7 +80,7 @@ fromCExpr n@(C.CConst c) = LiteralValue (fromCConst c)
 fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
                                                  (fromCExpr e3)
-                                                 (makeNodeInfo n)
+                                                 (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Binary operations
@@ -81,25 +88,25 @@ fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr e1)
 fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
                                               (fromCExpr e1)
                                               (fromCExpr e2)
-                                              (makeNodeInfo n)
+                                              (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Function application
 --------------------------------------------------------------------------------
 fromCExpr n@(C.CCall expr exprs _) = FunApp (fromCExpr expr)
                                             (map fromCExpr exprs)
-                                            (makeNodeInfo n)
+                                            (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Unknown expressions
 --------------------------------------------------------------------------------
-fromCExpr e = UnkExpr (gshow e) (makeNodeInfo e)
+fromCExpr e = UnkExpr (gshow e) (toAnnotation e)
 
 --------------------------------------------------------------------------------
 -- | Takes a CNode and returns a generic NodeInfo
 --------------------------------------------------------------------------------
-makeNodeInfo :: (C.Pretty a, C.Pos a) => a -> Maybe NodeInfo
-makeNodeInfo p = Just $ NodeInfo (makePos p) (makePretty p)
+toAnnotation :: (C.Pretty a, C.Pos a) => a -> Maybe NodeInfo
+toAnnotation p = Just $ NodeInfo (makePos p) (makePretty p)
   where
     makePretty   = Just . show . C.pretty
     makePos      = Just . makePos' . C.posOf
@@ -142,26 +149,26 @@ fromCCompoundBlock (C.CNestedFunDef funDef) = Right $ fromCFunctionDef funDef
 -- | Convert a C statement into a generic statement
 --------------------------------------------------------------------------------
 fromCStmt :: C.CStat -> Stmt
-fromCStmt n@(C.CLabel ident stmt attrs _) = Label (C.identToString ident)
+fromCStmt n@(C.CLabel ident stmt attrs _) = Label (fromCIdent ident)
                                                   (fromCStmt stmt)
-                                                  (makeNodeInfo n)
+                                                  (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Case statements
 --------------------------------------------------------------------------------
 fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr e1)
                                          (fromCStmt s1)
-                                         (makeNodeInfo n)
+                                         (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Case statement default case
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (makeNodeInfo n)
+fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Expression statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (makeNodeInfo n)
+fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | If statements
@@ -169,21 +176,21 @@ fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (makeNodeInfo n)
 fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr e1)
                                          (fromCStmt s1)
                                          (fmap fromCStmt ms1)
-                                         (makeNodeInfo n)
+                                         (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Switch statements
 --------------------------------------------------------------------------------
 fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
                                              (fromCStmt s1)
-                                             (makeNodeInfo n)
+                                             (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Convert 'Compound' statements to a generic Block
 --------------------------------------------------------------------------------
 fromCStmt n@(C.CCompound localLabels blockItems _) =
   let converted = map (stmtOrDecl . fromCCompoundBlock) blockItems
-  in Block converted (makeNodeInfo n)
+  in Block converted (toAnnotation n)
     where
       stmtOrDecl (Left stmt)  = stmt
       stmtOrDecl (Right decl) = DeclStmt decl
@@ -191,7 +198,7 @@ fromCStmt n@(C.CCompound localLabels blockItems _) =
 --------------------------------------------------------------------------------
 -- | Unknoown statements
 --------------------------------------------------------------------------------
-fromCStmt n = UnkStmt (gshow n) (makeNodeInfo n)
+fromCStmt n = UnkStmt (gshow n) (toAnnotation n)
 
 
 --------------------------------------------------------------------------------
@@ -201,7 +208,7 @@ fromCFunctionDef :: C.CFunDef -> Decl
 fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
   let name  = Nothing
       stmt' = fromCStmt stmt
-      node  = makeNodeInfo n
+      node  = toAnnotation n
   in Function [] name stmt' node
 
 --------------------------------------------------------------------------------
@@ -210,7 +217,7 @@ fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
 fromCExtDecl :: C.CExtDecl -> Decl
 fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d
 fromCExtDecl (C.CDeclExt d) = fromCDecl d
-fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
+fromCExtDecl n = UnkDecl (gshow n) (toAnnotation n)
 
 
 --------------------------------------------------------------------------------
@@ -218,7 +225,7 @@ fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
 --------------------------------------------------------------------------------
 fromCTranslUnit :: C.CTranslUnit -> Module
 fromCTranslUnit n@(C.CTranslUnit extDecls _) =
-  Module (map (DeclStmt . fromCExtDecl) extDecls) (makeNodeInfo n)
+  Module (map (DeclStmt . fromCExtDecl) extDecls) (toAnnotation n)
 
 
 --------------------------------------------------------------------------------

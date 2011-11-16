@@ -53,8 +53,13 @@ fromSpan :: (Pretty n) => n -> PyAnno -> Maybe NodeInfo
 fromSpan n (SpanCoLinear f r c _)    = Just $ makeNode f r c n
 fromSpan n (SpanMultiLine f r c _ _) = Just $ makeNode f r c n
 fromSpan n (SpanPoint f r c)         = Just $ makeNode f r c n
-fromSpan n _                         = Nothing
+fromSpan _ _                         = Nothing
 
+--------------------------------------------------------------------------------
+-- | Identifiers
+--------------------------------------------------------------------------------
+fromPyIdent :: P.Ident PyAnno -> Identifier
+fromPyIdent n@(P.Ident s _) = Ident s Nothing (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Get NodeInfo out of an annotated Python node
@@ -77,7 +82,7 @@ fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
 --------------------------------------------------------------------------------
 -- | Variables
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Var ident _) = Var (P.ident_string ident)
+fromPyExpr n@(P.Var ident _) = Var (fromPyIdent ident)
                                    (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -128,7 +133,7 @@ toBlock stmts = Block (map fromPyStmt stmts)
 --------------------------------------------------------------------------------
 fromPyIf :: Maybe PyStmt -> [(PyExpr, [PyStmt])] -> Maybe Stmt -> Maybe Stmt
 -- If our if/elif list is empty, just return the else block (if it exists)
-fromPyIf cond [] el     = el
+fromPyIf _ [] el        = el
 fromPyIf cond (t:ts) el =
 
   -- Extract one if/elif expression and block statement
@@ -147,7 +152,7 @@ fromPyStmt :: PyStmt -> Stmt
 fromPyStmt n@(P.Fun name' args result body _) =
   let ann = fromPyAnnotation n
   in DeclStmt $ Function (maybeToList $ fmap (Result . fromPyExpr) result)
-                         (Just $ P.ident_string name')
+                         (Just $ fromPyIdent name')
                          (toBlock body ann)
                          ann
 
@@ -184,6 +189,7 @@ fromPyStmt n@(P.Assign exprs exprFrom _) =
     _   -> toSimpleExprStmt $ DestructuringAssign (map fromPyExpr exprs)
                                                   exprFrom'
                                                   ann
+
 --------------------------------------------------------------------------------
 -- | Augmented assignment statements (eg. +=, -=, etc)
 --------------------------------------------------------------------------------
@@ -194,13 +200,40 @@ fromPyStmt n@(P.AugmentedAssign e1 op e2 _) =
                             (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
+-- | Class statements
+--------------------------------------------------------------------------------
+fromPyStmt n@(P.Class name args body _) =
+  DeclStmt $ Class (fromPyIdent name)
+                   (map fromPyStmt body)
+                   (fromPyAnnotation n)
+
+--------------------------------------------------------------------------------
+-- | Import statements
+--------------------------------------------------------------------------------
+fromPyStmt n@(P.Import items _) = Import (map fromPyImportItem items)
+                                         Nothing
+                                         (fromPyAnnotation n)
+
+
+--------------------------------------------------------------------------------
 -- | Unknown statements
 --------------------------------------------------------------------------------
 fromPyStmt n = UnkStmt (show $ pretty n) (fromPyAnnotation n)
 
+--------------------------------------------------------------------------------
+-- | Simple expression statements
+--------------------------------------------------------------------------------
 toSimpleExprStmt :: Expr -> Stmt
 toSimpleExprStmt a = ExprStmt (Just a) Nothing
 
+--------------------------------------------------------------------------------
+-- | Convert a Python import item to a generic statement
+--------------------------------------------------------------------------------
+fromPyImportItem :: P.ImportItem PyAnno -> ImportItem
+fromPyImportItem n@(P.ImportItem names maybeIdent _) =
+  ImportItem (map fromPyIdent names)
+             (fmap fromPyIdent maybeIdent)
+             (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Python 'augmented' assignment operators
@@ -209,7 +242,6 @@ fromPyAssignOp :: PyAssignOp -> AssignOp
 fromPyAssignOp (P.PlusAssign _)       = PlusAssign
 fromPyAssignOp (P.DivAssign _)        = DivAssign
 fromPyAssignOp (P.MultAssign _)       = MulAssign
-fromPyAssignOp (P.PlusAssign _)       = PlusAssign
 fromPyAssignOp (P.MinusAssign _)      = MinusAssign
 fromPyAssignOp (P.ModAssign _)        = ModAssign
 fromPyAssignOp (P.PowAssign _)        = PowAssign
@@ -219,8 +251,7 @@ fromPyAssignOp (P.BinXorAssign _)     = BinXorAssign
 fromPyAssignOp (P.LeftShiftAssign _)  = LeftShiftAssign
 fromPyAssignOp (P.RightShiftAssign _) = RightShiftAssign
 fromPyAssignOp (P.FloorDivAssign _)   = FloorDivAssign
-fromPyAssignOp n                    = UnkAssign (show n)
-
+fromPyAssignOp n                      = UnkAssign (show n)
 
 --------------------------------------------------------------------------------
 -- | Convert a Python module to a generic module

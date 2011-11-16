@@ -6,7 +6,7 @@ module Semgrep.Languages.Generic where
 import           Data.Generics
 import           Data.Maybe(isJust)
 import           Control.Monad(foldM)
-import           Semgrep
+import           Semgrep()
 
 
 data Position = Position
@@ -16,6 +16,7 @@ data Position = Position
               , posColumnNumber :: Maybe Int
               }
               deriving (Data, Typeable)
+
 
 try' :: (Show a) => Maybe a -> String
 try' = maybe "??" show
@@ -121,15 +122,15 @@ data AssignOp = DefaultAssign
 -- | Literal values
 --------------------------------------------------------------------------------
 data LiteralValue = IntLiteral Int
-              | CharLiteral Char
-              | FloatLiteral Float
-              | StringLiteral String
-              deriving (Show, Typeable, Data, Eq)
+                  | CharLiteral Char
+                  | FloatLiteral Float
+                  | StringLiteral String
+                  deriving (Show, Typeable, Data, Eq)
 
 --------------------------------------------------------------------------------
 -- | Expressions
 --------------------------------------------------------------------------------
-data Expr = Var String Annotation
+data Expr = Var Identifier Annotation
           | CompoundExpr [Expr] Annotation
           | LiteralValue LiteralValue (Maybe String) Annotation
           | BinaryOp BinOp Expr Expr Annotation
@@ -141,14 +142,16 @@ data Expr = Var String Annotation
        -- | CaseExpr
           deriving (Show, Typeable, Data)
 
-data Type = Type String
-          deriving (Show, Typeable, Data)
+--------------------------------------------------------------------------------
+-- | Function/type constructor arguments
+--------------------------------------------------------------------------------
+--data Argument =
 
 --------------------------------------------------------------------------------
 -- | Statements
 --------------------------------------------------------------------------------
 data Stmt = ExprStmt (Maybe Expr) Annotation
-          | Label String Stmt Annotation
+          | Label Identifier Stmt Annotation
           | DeclStmt Decl
           | CaseStmt Expr Stmt Annotation
           | CaseStmtDefault Stmt Annotation
@@ -156,7 +159,20 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | SwitchStmt Expr Stmt Annotation
           | Block [Stmt] Annotation
           | UnkStmt String Annotation
+          | Import [ImportItem] (Maybe Identifier) Annotation
           deriving (Show, Typeable, Data)
+
+--------------------------------------------------------------------------------
+-- | Import items
+--------------------------------------------------------------------------------
+data ImportItem = ImportItem [Identifier] (Maybe Identifier) Annotation
+                deriving (Show, Typeable, Data)
+
+--------------------------------------------------------------------------------
+-- | Identifiers
+--------------------------------------------------------------------------------
+data Identifier = Ident String (Maybe Int) Annotation
+                deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
 -- | Declaration properties
@@ -167,9 +183,12 @@ data DeclProp = Result Expr
 --------------------------------------------------------------------------------
 -- | Declarations
 --------------------------------------------------------------------------------
-data Decl = Class [Decl] Annotation
-          | DataDecl (Maybe Type) Annotation
-          | Function [DeclProp] (Maybe String) Stmt Annotation
+data Decl = Class { declName :: Identifier
+                  , declArgs :: [Stmt]
+                  , declInfo :: Annotation
+                  }
+          | DataDecl Annotation
+          | Function [DeclProp] (Maybe Identifier) Stmt Annotation
           | UnkDecl String Annotation
           deriving (Show, Typeable, Data)
 
@@ -198,6 +217,9 @@ instance Unknown Stmt where
   unk (UnkStmt s _)        = Just s
   unk _                    = Nothing
 
+instance Unknown Identifier where
+  unk _ = Nothing
+
 instance Named LiteralValue where
   name (IntLiteral {})       = "Integer"
   name (CharLiteral {})      = "Char"
@@ -208,19 +230,25 @@ instance Named LiteralValue where
 instance Named Expr where
   name (Var {})                 = "Variable"
   name (CompoundExpr {})        = "Compound Expression"
-  name (LiteralValue c _ _ )    = "Constant Value (" ++ name c ++ ")"
+  name (LiteralValue c _ _ )    = "Literal Value (" ++ name c ++ ")"
   name (BinaryOp {})            = "Binary Operation"
   name (Assign {})              = "Assignment"
   name (DestructuringAssign {}) = "DestructuringAssignment"
   name (ConditionalOp {})       = "Conditional Operator"
   name (FunApp {})              = "Function Call"
-  name (UnkExpr {})             = "Unknown Expression"
+  name _                        = "Unknown Expression"
 
 instance Named Decl where
   name (Class {})          = "Class"
   name (DataDecl {})       = "Data"
   name (Function {})       = "Function"
-  name (UnkDecl {})        = "Unknown Declaration"
+  name _                   = "Unknown Declaration"
+
+instance Named ImportItem where
+  name (ImportItem {})     = "Import Item"
+
+instance Named Identifier where
+  name (Ident {})          = "Identifier"
 
 instance Named Stmt where
   name (ExprStmt mExpr _)   = "Expression Statement" ++ addParens name mExpr
@@ -231,6 +259,7 @@ instance Named Stmt where
   name (IfStmt {})          = "If"
   name (SwitchStmt {})      = "Switch"
   name (Block {})           = "Block"
+  name (Import {})          = "Import"
   name (UnkStmt {})         = "Unknown Statement"
 
 instance MaybeInfo Stmt where
@@ -241,24 +270,32 @@ instance MaybeInfo Stmt where
   info (CaseStmtDefault _ n) = n
   info (IfStmt _ _ _ n)     = n
   info (SwitchStmt _ _ n)   = n
-  info (Block _ n)  = n
+  info (Block _ n)          = n
+  info (Import _ _ n)       = n
   info (UnkStmt _ n)        = n
+
+instance MaybeInfo ImportItem where
+  info (ImportItem _ _ n)   = n
+
+instance MaybeInfo Identifier where
+  info (Ident _ _ n)        = n
 
 instance MaybeInfo Expr where
   info (Var _ n)            = n
   info (CompoundExpr _ n)   = n
-  info (LiteralValue _ _ n)     = n
+  info (LiteralValue _ _ n) = n
   info (BinaryOp _ _ _ n)   = n
   info (Assign _ _ _ n)     = n
+  info (DestructuringAssign _ _ n) = n
   info (ConditionalOp _ _ _ n) = n
   info (FunApp _ _ n)       = n
   info (UnkExpr _ n)        = n
 
 instance MaybeInfo Decl where
-  info (Class _ n)    = n
-  info (DataDecl _ n) = n
+  info (Class _ _ n)      = n
+  info (DataDecl n)       = n
   info (Function _ _ _ n) = n
-  info (UnkDecl _ n) = n
+  info (UnkDecl _ n)      = n
 
 instance MaybeInfo Module where
   info (Module _ n) = n
@@ -288,6 +325,7 @@ stringLit :: Expr -> Maybe String
 stringLit (LiteralValue (StringLiteral s) _ _) = Just s
 stringLit _ = Nothing
 
+
 --------------------------------------------------------------------------------
 -- | Converts a compound expression consisting of only string literals into
 --   a single string literal.
@@ -307,12 +345,12 @@ fromCompoundedStrings (CompoundExpr [e] a) = updateNode e a
 fromCompoundedStrings (CompoundExpr (e1:es) a) = foldM joinTwo e1 es
   where
     joinTwo :: Expr -> Expr -> Maybe Expr
-    joinTwo l1@(LiteralValue s1 m1 a1) l2@(LiteralValue s2 m2 a2) = do
+    joinTwo l1@(LiteralValue _ m1 _) l2 = do
       str1 <- stringLit l1
       str2 <- stringLit l2
       return $ LiteralValue (StringLiteral $ str1 ++ str2) m1 a
     joinTwo _ _ = Nothing
-
+fromCompoundedStrings _ = Nothing
 
 
 isFunctionCall :: Expr -> Bool
