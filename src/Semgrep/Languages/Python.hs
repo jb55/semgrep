@@ -116,6 +116,9 @@ fromPyElIf (expr, stmts) =
          Nothing
 
 
+--------------------------------------------------------------------------------
+-- | Python 'Suite' to generic Block
+--------------------------------------------------------------------------------
 toBlock :: [PyStmt] -> Annotation -> Stmt
 toBlock stmts = Block (map fromPyStmt stmts)
 

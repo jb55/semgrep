@@ -299,6 +299,11 @@ stringLit _ = Nothing
 --------------------------------------------------------------------------------
 fromCompoundedStrings :: Expr -> Maybe Expr
 fromCompoundedStrings (CompoundExpr [] _)  = Nothing
+fromCompoundedStrings (CompoundExpr [e] a) = updateNode e a
+  where
+    updateNode (LiteralValue s m _) newA = Just $ LiteralValue s m newA
+    updateNode _ _                       = Nothing
+
 fromCompoundedStrings (CompoundExpr (e1:es) a) = foldM joinTwo e1 es
   where
     joinTwo :: Expr -> Expr -> Maybe Expr
@@ -307,6 +312,7 @@ fromCompoundedStrings (CompoundExpr (e1:es) a) = foldM joinTwo e1 es
       str2 <- stringLit l2
       return $ LiteralValue (StringLiteral $ str1 ++ str2) m1 a
     joinTwo _ _ = Nothing
+
 
 
 isFunctionCall :: Expr -> Bool
