@@ -66,7 +66,7 @@ fromPyAnnotation n = fromSpan n (P.annot n)
 
 
 --------------------------------------------------------------------------------
--- | Convert a Python expression into a generic expression
+-- | Expressions
 --------------------------------------------------------------------------------
 fromPyExpr :: PyExpr -> Expr
 fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
@@ -75,20 +75,20 @@ fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
                                                 (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
--- | Convert Python variables
+-- | Variables
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Var ident _) = Var (P.ident_string ident)
                                    (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
--- | Convert Python int literals
+-- | Int literals
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Int val lit _) = LiteralValue (IntLiteral $ fromInteger val)
                                               (Just lit)
                                               (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
--- | Convert Python string expressions
+-- | String literals
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Strings strs _) =
   let stringConsts   = map StringLiteral strs
@@ -99,6 +99,9 @@ fromPyExpr n@(P.Strings strs _) =
     Nothing -> compoundExpr
     Just x  -> x
 
+--------------------------------------------------------------------------------
+-- | Comment
+--------------------------------------------------------------------------------
 fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 
 
