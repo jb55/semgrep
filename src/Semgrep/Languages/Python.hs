@@ -25,11 +25,11 @@ type PyModule   = P.Module PyAnno
 --------------------------------------------------------------------------------
 -- | Binary operators
 --------------------------------------------------------------------------------
-fromPyOp :: P.Op anno -> BinOp
+fromPyOp :: (Data anno) => P.Op anno -> BinOp
 fromPyOp (P.LessThan _)    = LeOp
 fromPyOp (P.GreaterThan _) = GrOp
 fromPyOp (P.Equality _)    = EqOp
-fromPyOp o                 = UnkOp "dunno"
+fromPyOp o                 = UnkOp (gshow o)
 
 
 --------------------------------------------------------------------------------
