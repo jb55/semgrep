@@ -37,18 +37,34 @@ instance Show NodeInfo where
   show (NodeInfo p s) =
     "NodeInfo " ++ try' p ++ maybe "" (\x -> " \"" ++ x ++ "\"") s
 
+--------------------------------------------------------------------------------
+-- | NodeInfo contains generic node information such as the position of the node
+--   in the document
+--------------------------------------------------------------------------------
 data NodeInfo = NodeInfo (Maybe Position) (Maybe String)
               deriving (Data, Typeable)
 
+--------------------------------------------------------------------------------
+-- | Named types
+--------------------------------------------------------------------------------
 class Named a where
   name :: a -> String
 
+--------------------------------------------------------------------------------
+-- | Types that may produce a node info
+--------------------------------------------------------------------------------
 class MaybeInfo a where
   info :: a -> Maybe NodeInfo
 
+--------------------------------------------------------------------------------
+-- | Error reporting unconverted nodes
+--------------------------------------------------------------------------------
 class Unknown a where
   unk :: a -> Maybe String
 
+--------------------------------------------------------------------------------
+-- | Types that may produce position information
+--------------------------------------------------------------------------------
 class MaybePos a where
   posOf :: a -> Maybe Position
 
@@ -69,6 +85,9 @@ instance MaybeInfo (Maybe NodeInfo) where
 type Annotation = Maybe NodeInfo
 
 
+--------------------------------------------------------------------------------
+-- | Binary operators
+--------------------------------------------------------------------------------
 data BinOp = LeOp
            | GrOp
            | LeqOp
@@ -79,6 +98,9 @@ data BinOp = LeOp
            | UnkOp String
            deriving (Show, Typeable, Data, Eq)
 
+--------------------------------------------------------------------------------
+-- | Assignment operators
+--------------------------------------------------------------------------------
 data AssignOp = DefaultAssign
               | DivAssign
               | MulAssign
@@ -95,12 +117,18 @@ data AssignOp = DefaultAssign
               | UnkAssign String
               deriving (Show, Typeable, Data, Eq)
 
+--------------------------------------------------------------------------------
+-- | Literal values
+--------------------------------------------------------------------------------
 data LiteralValue = IntLiteral Int
               | CharLiteral Char
               | FloatLiteral Float
               | StringLiteral String
               deriving (Show, Typeable, Data, Eq)
 
+--------------------------------------------------------------------------------
+-- | Expressions
+--------------------------------------------------------------------------------
 data Expr = Var String Annotation
           | CompoundExpr [Expr] Annotation
           | LiteralValue LiteralValue (Maybe String) Annotation
@@ -116,6 +144,9 @@ data Expr = Var String Annotation
 data Type = Type String
           deriving (Show, Typeable, Data)
 
+--------------------------------------------------------------------------------
+-- | Statements
+--------------------------------------------------------------------------------
 data Stmt = ExprStmt (Maybe Expr) Annotation
           | Label String Stmt Annotation
           | DeclStmt Decl
@@ -127,18 +158,30 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
+--------------------------------------------------------------------------------
+-- | Declaration properties
+--------------------------------------------------------------------------------
 data DeclProp = Result Expr
               deriving (Show, Typeable, Data)
 
+--------------------------------------------------------------------------------
+-- | Declarations
+--------------------------------------------------------------------------------
 data Decl = Class [Decl] Annotation
           | DataDecl (Maybe Type) Annotation
           | Function [DeclProp] (Maybe String) Stmt Annotation
           | UnkDecl String Annotation
           deriving (Show, Typeable, Data)
 
+--------------------------------------------------------------------------------
+-- | Generic module
+--------------------------------------------------------------------------------
 data Module = Module [Stmt] Annotation
             deriving (Show, Typeable, Data)
 
+--------------------------------------------------------------------------------
+-- | Generic projects, contains zero or more modules
+--------------------------------------------------------------------------------
 data Project = Project [Module]
              deriving (Show, Typeable, Data)
 
@@ -245,6 +288,15 @@ stringLit :: Expr -> Maybe String
 stringLit (LiteralValue (StringLiteral s) _ _) = Just s
 stringLit _ = Nothing
 
+--------------------------------------------------------------------------------
+-- | Converts a compound expression consisting of only string literals into
+--   a single string literal.
+--
+--   eg. "hello""world" becomes "helloworld"
+--
+--   This results in Nothing if the compound expression contains expressions
+--   other than String literals
+--------------------------------------------------------------------------------
 fromCompoundedStrings :: Expr -> Maybe Expr
 fromCompoundedStrings (CompoundExpr [] _)  = Nothing
 fromCompoundedStrings (CompoundExpr (e1:es) a) = foldM joinTwo e1 es
@@ -293,6 +345,10 @@ infos ms = [a | Just a <- map info ms]
 unks :: (Unknown a) => [a] -> [String]
 unks unks = [a | Just a <- map unk unks]
 
+
+--------------------------------------------------------------------------------
+-- | Pretty print nodes of all kinds!
+--------------------------------------------------------------------------------
 namedInfo :: (Named a, MaybeInfo a, Unknown a) => a -> String
 namedInfo a =
   let n  = name a

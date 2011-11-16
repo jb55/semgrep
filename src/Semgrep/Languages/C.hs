@@ -12,7 +12,9 @@ import           Data.Generics
 import           Semgrep()
 
 
--- Converts a C assignment operator to a generic one
+--------------------------------------------------------------------------------
+-- | Assignment operators
+--------------------------------------------------------------------------------
 fromCAssignOp :: C.CAssignOp -> AssignOp
 fromCAssignOp C.CAssignOp = DefaultAssign
 fromCAssignOp C.CMulAssOp = MulAssign
@@ -20,7 +22,9 @@ fromCAssignOp C.CDivAssOp = DivAssign
 fromCAssignOp o = UnkAssign (show o)
 
 
--- Converts a C binary operator to a generic one
+--------------------------------------------------------------------------------
+-- | Binary operators
+--------------------------------------------------------------------------------
 fromCBinOp :: C.CBinaryOp -> BinOp
 fromCBinOp C.CLeOp  = LeOp
 fromCBinOp C.CGrOp  = GrOp
@@ -32,7 +36,9 @@ fromCBinOp C.CAddOp = AddOp
 fromCBinOp o        = UnkOp (gshow o)
 
 
--- Converts a C const value to a generic const value
+--------------------------------------------------------------------------------
+-- | Converts a C literal value to a generic literal
+--------------------------------------------------------------------------------
 fromCConst :: C.CConst -> LiteralValue
 fromCConst (C.CIntConst cint _) = IntLiteral (fromInteger $ C.getCInteger cint)
 fromCConst (C.CCharConst cchar _) = CharLiteral (head $ C.getCChar cchar)
@@ -40,36 +46,58 @@ fromCConst (C.CFloatConst (C.CFloat s) _) = FloatLiteral (read s)
 fromCConst (C.CStrConst cstring _) = StringLiteral (C.getCString cstring)
 
 
--- Converts a C expression to a generic expression
+--------------------------------------------------------------------------------
+-- | Converts a C expression to a generic expression
+--------------------------------------------------------------------------------
 fromCExpr :: C.CExpr -> Expr
 fromCExpr n@(C.CVar ident _) = Var (C.identToString ident) (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Assignment expressions
+--------------------------------------------------------------------------------
 fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
-                                          (fromCExpr e1)
-                                          (fromCExpr e2)
-                                          (makeNodeInfo n)
+                                            (fromCExpr e1)
+                                            (fromCExpr e2)
+                                            (makeNodeInfo n)
 
-fromCExpr n@(C.CConst c)           = LiteralValue (fromCConst c)
-                                              Nothing
-                                              (makeNodeInfo n)
+--------------------------------------------------------------------------------
+-- | Literal values
+--------------------------------------------------------------------------------
+fromCExpr n@(C.CConst c) = LiteralValue (fromCConst c)
+                                        Nothing
+                                        (makeNodeInfo n)
 
-fromCExpr n@(C.CCond e1 e2 e3 _)   = ConditionalOp (fromCExpr e1)
+--------------------------------------------------------------------------------
+-- | Conditional operations (?:)
+--------------------------------------------------------------------------------
+fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
                                                  (fromCExpr e3)
                                                  (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Binary operations
+--------------------------------------------------------------------------------
 fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
                                               (fromCExpr e1)
                                               (fromCExpr e2)
                                               (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Function application
+--------------------------------------------------------------------------------
 fromCExpr n@(C.CCall expr exprs _) = FunApp (fromCExpr expr)
                                             (map fromCExpr exprs)
                                             (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Unknown expressions
+--------------------------------------------------------------------------------
 fromCExpr e = UnkExpr (gshow e) (makeNodeInfo e)
 
--- Takes a CNode and returns a generic NodeInfo
+--------------------------------------------------------------------------------
+-- | Takes a CNode and returns a generic NodeInfo
+--------------------------------------------------------------------------------
 makeNodeInfo :: (C.Pretty a, C.Pos a) => a -> Maybe NodeInfo
 makeNodeInfo p = Just $ NodeInfo (makePos p) (makePretty p)
   where
@@ -81,13 +109,17 @@ makeNodeInfo p = Just $ NodeInfo (makePos p) (makePretty p)
                             (Just $ C.posColumn pos)
 
 
--- Takes a C statement a returns if it's an 'If' statement or not
+--------------------------------------------------------------------------------
+-- | Takes a C statement a returns if it's an 'If' statement or not
+--------------------------------------------------------------------------------
 isIfStmt :: C.CStat -> Bool
 isIfStmt (C.CIf _ _ _ _) = True
 isIfStmt _ = False
 
 
--- Traverses a C translation unit and returns a list of C if statements
+--------------------------------------------------------------------------------
+-- | Traverses a C translation unit and returns a list of C if statements
+--------------------------------------------------------------------------------
 ifStmts :: C.CTranslUnit -> [C.CStat]
 ifStmts = listify isIfStmt
 
@@ -106,39 +138,65 @@ fromCCompoundBlock (C.CBlockDecl decl) = Right $ fromCDecl decl
 fromCCompoundBlock (C.CNestedFunDef funDef) = Right $ fromCFunctionDef funDef
 
 
+--------------------------------------------------------------------------------
 -- | Convert a C statement into a generic statement
+--------------------------------------------------------------------------------
 fromCStmt :: C.CStat -> Stmt
 fromCStmt n@(C.CLabel ident stmt attrs _) = Label (C.identToString ident)
                                                   (fromCStmt stmt)
                                                   (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Case statements
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr e1)
                                          (fromCStmt s1)
                                          (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Case statement default case
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Expression statements
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | If statements
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr e1)
                                          (fromCStmt s1)
                                          (fmap fromCStmt ms1)
                                          (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Switch statements
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
                                              (fromCStmt s1)
                                              (makeNodeInfo n)
 
+--------------------------------------------------------------------------------
+-- | Convert 'Compound' statements to a generic Block
+--------------------------------------------------------------------------------
 fromCStmt n@(C.CCompound localLabels blockItems _) =
   let converted = map (stmtOrDecl . fromCCompoundBlock) blockItems
   in Block converted (makeNodeInfo n)
     where
-      stmtOrDecl (Left stmt) = stmt
-      stmtOrDecl (Right decl)  = DeclStmt decl
+      stmtOrDecl (Left stmt)  = stmt
+      stmtOrDecl (Right decl) = DeclStmt decl
 
+--------------------------------------------------------------------------------
+-- | Unknoown statements
+--------------------------------------------------------------------------------
 fromCStmt n = UnkStmt (gshow n) (makeNodeInfo n)
 
 
+--------------------------------------------------------------------------------
+-- | Function declarations
+--------------------------------------------------------------------------------
 fromCFunctionDef :: C.CFunDef -> Decl
 fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
   let name  = Nothing
@@ -146,19 +204,27 @@ fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
       node  = makeNodeInfo n
   in Function [] name stmt' node
 
+--------------------------------------------------------------------------------
+-- | CExtDecl to Decl
+--------------------------------------------------------------------------------
 fromCExtDecl :: C.CExtDecl -> Decl
 fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d
 fromCExtDecl (C.CDeclExt d) = fromCDecl d
 fromCExtDecl n = UnkDecl (gshow n) (makeNodeInfo n)
 
 
+--------------------------------------------------------------------------------
+-- | Build a module from a C translation unit
+--------------------------------------------------------------------------------
 fromCTranslUnit :: C.CTranslUnit -> Module
 fromCTranslUnit n@(C.CTranslUnit extDecls _) =
   Module (map (DeclStmt . fromCExtDecl) extDecls) (makeNodeInfo n)
 
 
--- Takes a FilePath string and returns a generic AST, annotated with NodeInfo
--- from the C expressions.
+--------------------------------------------------------------------------------
+-- | Takes a FilePath string and returns a generic AST, annotated with NodeInfo
+--   from the C expressions
+--------------------------------------------------------------------------------
 parse :: FilePath -> [String] -> IO (Either String Project)
 parse file incs = do
   let gcc = newGCC "gcc"
