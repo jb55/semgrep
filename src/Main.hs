@@ -45,15 +45,19 @@ process file includes = do
           let allStmts = filter (not . isDullStmt) $ statements project
           let conds = conditions allExprs
           let calls' = calls allExprs
+          let nodes = concat . map moduleNodes . projectModules $ project
 
-          putStrLn "\nAll Expressions"
-          mapM_ (putStrLn . namedInfo) allExprs
-          putStrLn "\nConditional Expressions"
-          mapM_ (putStrLn . namedInfo) conds
-          putStrLn "\nFunction Calls"
-          mapM_ (putStrLn . namedInfo) calls'
-          putStrLn "\nAll Statements"
-          mapM_ (putStrLn . namedInfo) allStmts
+          putStrLn "\nAll Nodes"
+          mapM_ (putStrLn . namedInfo) nodes
+
+    --    putStrLn "\nAll Expressions"
+    --    mapM_ (putStrLn . namedInfo) allExprs
+    --    putStrLn "\nConditional Expressions"
+    --    mapM_ (putStrLn . namedInfo) conds
+    --    putStrLn "\nFunction Calls"
+    --    mapM_ (putStrLn . namedInfo) calls'
+    --    putStrLn "\nAll Statements"
+    --    mapM_ (putStrLn . namedInfo) allStmts
 
     --    putStrLn (show project)
     --    putStrLn "\nIf Statements"

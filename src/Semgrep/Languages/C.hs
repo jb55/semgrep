@@ -233,7 +233,7 @@ fromCExtDecl n = UnkDecl (gshow n) (toAnnotation n)
 fromCTranslUnit :: C.CTranslUnit -> Module
 fromCTranslUnit n@(C.CTranslUnit extDecls _) =
   let ann   = toAnnotation n
-      fromD = DeclStmt . fromCExtDecl
+      fromD = Stmt . DeclStmt . fromCExtDecl
   in Module (map fromD extDecls)
             (translUnitModuleName n)
             ann

@@ -271,7 +271,7 @@ fromPyAssignOp n                      = UnkAssign (show n)
 -- | Convert a Python module to a generic module
 --------------------------------------------------------------------------------
 fromPyModule :: PyModule -> Module
-fromPyModule a@(P.Module stmts) = Module (map fromPyStmt stmts)
+fromPyModule a@(P.Module stmts) = Module (map (Stmt . fromPyStmt) stmts)
                                          Nothing
                                          Nothing
 

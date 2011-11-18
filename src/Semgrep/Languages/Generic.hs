@@ -163,6 +163,11 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
+data Node = Stmt Stmt
+          | Expr Expr
+          | Decl Decl
+          deriving (Show, Typeable, Data)
+
 --------------------------------------------------------------------------------
 -- | Import items
 --------------------------------------------------------------------------------
@@ -196,7 +201,7 @@ data Decl = Class { declName :: Identifier
 --------------------------------------------------------------------------------
 -- | Generic module
 --------------------------------------------------------------------------------
-data Module = Module { moduleStmts :: [Stmt]
+data Module = Module { moduleNodes :: [Node]
                      , moduleName  :: Maybe String
                      , moduleAnno  :: Annotation
                      } deriving (Show, Typeable, Data)
@@ -206,6 +211,11 @@ data Module = Module { moduleStmts :: [Stmt]
 --------------------------------------------------------------------------------
 data Project = Project [Module]
              deriving (Show, Typeable, Data)
+
+instance Unknown Node where
+  unk (Stmt x) = unk x
+  unk (Expr x) = unk x
+  unk (Decl x) = unk x
 
 instance Unknown Expr where
   unk (UnkExpr s _) = Just s
@@ -254,9 +264,9 @@ instance Named Identifier where
   name (Ident {})          = "Identifier"
 
 instance Named Stmt where
-  name (ExprStmt mExpr _)   = "Expression Statement" ++ addParens name mExpr
+  name (ExprStmt expr _)    = maybe "" (\e -> e ++ " ") (fmap name expr) ++ "Expression"
   name (Label {})           = "Label"
-  name (DeclStmt decl)      = "Declaration Statement (" ++ name decl ++ ")"
+  name (DeclStmt decl)      = name decl ++ " Declaration"
   name (CaseStmt {})        = "Case"
   name (CaseStmtDefault {}) = "Default Case"
   name (IfStmt {})          = "If"
@@ -264,7 +274,17 @@ instance Named Stmt where
   name (Block {})           = "Block"
   name (Import {})          = "Import"
   name (Return {})          = "Return"
-  name (UnkStmt {})         = "Unknown Statement"
+  name (UnkStmt {})         = "Unknown"
+
+instance Named Node where
+  name (Stmt x) = name x ++ " Statement"
+  name (Expr x) = name x ++ " Expression"
+  name (Decl x) = name x ++ " Declaration"
+
+instance MaybeInfo Node where
+  info (Stmt x) = info x
+  info (Expr x) = info x
+  info (Decl x) = info x
 
 instance MaybeInfo Stmt where
   info (ExprStmt _ n)       = n
