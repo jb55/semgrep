@@ -8,6 +8,7 @@ module Semgrep.Languages.C (
 import qualified Language.C as C
 import qualified Language.C.Data.Ident as I
 import           Language.C.System.GCC(newGCC)
+import           Control.Monad
 import           Semgrep.Languages.Generic
 import           Data.Generics
 import           Semgrep()
@@ -56,7 +57,7 @@ fromCIdent (I.Ident s i _) = Ident s (Just i) Nothing
 -- | Converts a C expression to a generic expression
 --------------------------------------------------------------------------------
 fromCExpr :: C.CExpr -> Expr
-fromCExpr n@(C.CVar ident _) = Var (fromCIdent ident) 
+fromCExpr n@(C.CVar ident _) = Var (fromCIdent ident)
                                    (toAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -93,9 +94,9 @@ fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
 --------------------------------------------------------------------------------
 -- | Function application
 --------------------------------------------------------------------------------
-fromCExpr n@(C.CCall expr exprs _) = FunApp (fromCExpr expr)
-                                            (map fromCExpr exprs)
-                                            (toAnnotation n)
+fromCExpr n@(C.CCall expr exprs _) = Call (fromCExpr expr)
+                                          (map fromCExpr exprs)
+                                          (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Unknown expressions
@@ -152,6 +153,12 @@ fromCStmt :: C.CStat -> Stmt
 fromCStmt n@(C.CLabel ident stmt attrs _) = Label (fromCIdent ident)
                                                   (fromCStmt stmt)
                                                   (toAnnotation n)
+
+--------------------------------------------------------------------------------
+-- | Return statements
+--------------------------------------------------------------------------------
+fromCStmt n@(C.CReturn mExpr _) = Return (fmap fromCExpr mExpr)
+                                         (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Case statements
@@ -225,8 +232,18 @@ fromCExtDecl n = UnkDecl (gshow n) (toAnnotation n)
 --------------------------------------------------------------------------------
 fromCTranslUnit :: C.CTranslUnit -> Module
 fromCTranslUnit n@(C.CTranslUnit extDecls _) =
-  Module (map (DeclStmt . fromCExtDecl) extDecls) (toAnnotation n)
+  let ann   = toAnnotation n
+      fromD = DeclStmt . fromCExtDecl
+  in Module (map fromD extDecls)
+            (translUnitModuleName n)
+            ann
 
+translUnitModuleName :: C.CTranslUnit -> Maybe String
+translUnitModuleName =
+  return . fileNameToModuleName <=< posFilename <=< posOf . toAnnotation
+
+fileNameToModuleName :: String -> String
+fileNameToModuleName = takeWhile (/= '.')
 
 --------------------------------------------------------------------------------
 -- | Takes a FilePath string and returns a generic AST, annotated with NodeInfo

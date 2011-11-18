@@ -105,7 +105,15 @@ fromPyExpr n@(P.Strings strs _) =
     Just x  -> x
 
 --------------------------------------------------------------------------------
--- | Comment
+-- | Function application
+--------------------------------------------------------------------------------
+fromPyExpr n@(P.Call e args _) = Call (fromPyExpr e)
+                                      []
+                                      (fromPyAnnotation n)
+
+
+--------------------------------------------------------------------------------
+-- | Unknown expressions
 --------------------------------------------------------------------------------
 fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 
@@ -208,6 +216,12 @@ fromPyStmt n@(P.Class name args body _) =
                    (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
+-- | Return statements
+--------------------------------------------------------------------------------
+fromPyStmt n@(P.Return mExpr _) = Return (fmap fromPyExpr mExpr)
+                                         (fromPyAnnotation n)
+
+--------------------------------------------------------------------------------
 -- | Import statements
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.Import items _) = Import (map fromPyImportItem items)
@@ -257,7 +271,9 @@ fromPyAssignOp n                      = UnkAssign (show n)
 -- | Convert a Python module to a generic module
 --------------------------------------------------------------------------------
 fromPyModule :: PyModule -> Module
-fromPyModule a@(P.Module stmts) = Module (map fromPyStmt stmts) Nothing
+fromPyModule a@(P.Module stmts) = Module (map fromPyStmt stmts)
+                                         Nothing
+                                         Nothing
 
 
 --------------------------------------------------------------------------------

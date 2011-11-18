@@ -137,7 +137,7 @@ data Expr = Var Identifier Annotation
           | Assign AssignOp Expr Expr Annotation
           | DestructuringAssign [Expr] Expr Annotation
           | ConditionalOp Expr (Maybe Expr) Expr Annotation
-          | FunApp Expr [Expr] Annotation
+          | Call Expr [Expr] Annotation
           | UnkExpr String Annotation
        -- | CaseExpr
           deriving (Show, Typeable, Data)
@@ -158,8 +158,9 @@ data Stmt = ExprStmt (Maybe Expr) Annotation
           | IfStmt Expr Stmt (Maybe Stmt) Annotation
           | SwitchStmt Expr Stmt Annotation
           | Block [Stmt] Annotation
-          | UnkStmt String Annotation
+          | Return (Maybe Expr) Annotation
           | Import [ImportItem] (Maybe Identifier) Annotation
+          | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
@@ -195,8 +196,10 @@ data Decl = Class { declName :: Identifier
 --------------------------------------------------------------------------------
 -- | Generic module
 --------------------------------------------------------------------------------
-data Module = Module [Stmt] Annotation
-            deriving (Show, Typeable, Data)
+data Module = Module { moduleStmts :: [Stmt]
+                     , moduleName  :: Maybe String
+                     , moduleAnno  :: Annotation
+                     } deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
 -- | Generic projects, contains zero or more modules
@@ -235,7 +238,7 @@ instance Named Expr where
   name (Assign {})              = "Assignment"
   name (DestructuringAssign {}) = "DestructuringAssignment"
   name (ConditionalOp {})       = "Conditional Operator"
-  name (FunApp {})              = "Function Call"
+  name (Call {})                = "Function Call"
   name _                        = "Unknown Expression"
 
 instance Named Decl where
@@ -260,6 +263,7 @@ instance Named Stmt where
   name (SwitchStmt {})      = "Switch"
   name (Block {})           = "Block"
   name (Import {})          = "Import"
+  name (Return {})          = "Return"
   name (UnkStmt {})         = "Unknown Statement"
 
 instance MaybeInfo Stmt where
@@ -272,6 +276,7 @@ instance MaybeInfo Stmt where
   info (SwitchStmt _ _ n)   = n
   info (Block _ n)          = n
   info (Import _ _ n)       = n
+  info (Return _ n)         = n
   info (UnkStmt _ n)        = n
 
 instance MaybeInfo ImportItem where
@@ -288,7 +293,7 @@ instance MaybeInfo Expr where
   info (Assign _ _ _ n)     = n
   info (DestructuringAssign _ _ n) = n
   info (ConditionalOp _ _ _ n) = n
-  info (FunApp _ _ n)       = n
+  info (Call _ _ n)       = n
   info (UnkExpr _ n)        = n
 
 instance MaybeInfo Decl where
@@ -298,7 +303,7 @@ instance MaybeInfo Decl where
   info (UnkDecl _ n)      = n
 
 instance MaybeInfo Module where
-  info (Module _ n) = n
+  info (Module _ _ n) = n
 
 type LanguageParser = FilePath -> IO (Either String Project)
 
@@ -311,6 +316,8 @@ isCondOp EqOp   = True
 isCondOp NeqOp  = True
 isCondOp _      = False
 
+projectModules :: Project -> [Module]
+projectModules (Project mods) = mods
 
 isCondExpr :: Expr -> Bool
 isCondExpr (ConditionalOp op _ _ _) = True
@@ -354,8 +361,12 @@ fromCompoundedStrings _ = Nothing
 
 
 isFunctionCall :: Expr -> Bool
-isFunctionCall (FunApp {}) = True
-isFunctionCall _           = False
+isFunctionCall (Call {}) = True
+isFunctionCall _         = False
+
+isImport :: Stmt -> Bool
+isImport (Import {}) = True
+isImport _           = False
 
 isCompound :: Stmt -> Bool
 isCompound (Block {}) = True
@@ -369,10 +380,13 @@ isDullStmt :: Stmt -> Bool
 isDullStmt stmt = or $ map ($stmt) dulls
   where dulls = [isExpressionStmt, isCompound]
 
-statements :: Project -> [Stmt]
+statements :: (Data a) => a -> [Stmt]
 statements = listify (const True)
 
-expressions :: Project -> [Expr]
+imports :: (Data a) => a -> [Stmt]
+imports = filter isImport . statements
+
+expressions :: (Data a) => a -> [Expr]
 expressions = listify (const True)
 
 calls :: [Expr] -> [Expr]
@@ -398,9 +412,9 @@ namedInfo a =
   let n  = name a
       i  = info a
       u  = unk a
-      mu = addParens' u
+      mu = maybe "" (\x -> " '" ++ x ++ "'") u
   in maybe ("No NodeInfo for " ++ n ++ mu) id $ do
     NodeInfo mPos mPretty <- i
     let ps = maybe "" (\pos -> show pos ++ " ") mPos
-    let pr = maybe "" (\pr  -> ": \"" ++ pr ++ "\"") mPretty
+    let pr = maybe "" (\pr  -> ": '" ++ pr ++ "'") mPretty
     return $ ps ++ n ++ pr
