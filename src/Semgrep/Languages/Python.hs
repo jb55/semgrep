@@ -70,13 +70,19 @@ fromPyAnnotation :: (P.Annotated n, Pretty (n PyAnno))
 fromPyAnnotation n = fromSpan n (P.annot n)
 
 
+fromPyStmt' :: PyStmt -> Node
+fromPyStmt' = Stmt . fromPyStmt
+
+fromPyExpr' :: PyExpr -> Node
+fromPyExpr' = Expr . fromPyExpr
+
 --------------------------------------------------------------------------------
 -- | Expressions
 --------------------------------------------------------------------------------
 fromPyExpr :: PyExpr -> Expr
 fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
-                                                (fromPyExpr e1)
-                                                (fromPyExpr e2)
+                                                (fromPyExpr' e1)
+                                                (fromPyExpr' e2)
                                                 (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -107,7 +113,7 @@ fromPyExpr n@(P.Strings strs _) =
 --------------------------------------------------------------------------------
 -- | Function application
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Call e args _) = Call (fromPyExpr e)
+fromPyExpr n@(P.Call e args _) = Call (fromPyExpr' e)
                                       []
                                       (fromPyAnnotation n)
 
@@ -123,8 +129,8 @@ fromPyExpr e = UnkExpr (show $ pretty e) Nothing
 --------------------------------------------------------------------------------
 fromPyElIf :: (PyExpr, [PyStmt]) -> Stmt
 fromPyElIf (expr, stmts) =
-  IfStmt (fromPyExpr expr)
-         (toBlock stmts Nothing)
+  IfStmt (fromPyExpr' expr)
+         (Stmt . toBlock stmts $ Nothing)
          Nothing
          Nothing
 
@@ -133,7 +139,7 @@ fromPyElIf (expr, stmts) =
 -- | Python 'Suite' to generic Block
 --------------------------------------------------------------------------------
 toBlock :: [PyStmt] -> Annotation -> Stmt
-toBlock stmts = Block (map fromPyStmt stmts)
+toBlock stmts = Block (map fromPyStmt' stmts)
 
 
 --------------------------------------------------------------------------------
@@ -187,14 +193,14 @@ fromPyStmt n@(P.StmtExpr expr _) = ExprStmt (Just $ fromPyExpr expr)
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.Assign exprs exprFrom _) =
   let ann       = fromPyAnnotation n
-      exprFrom' = fromPyExpr exprFrom
+      exprFrom' = fromPyExpr' exprFrom
   in case exprs of
     []  -> error "empty assign"
     [a] -> toSimpleExprStmt $ Assign DefaultAssign
-                                     (fromPyExpr a)
+                                     (fromPyExpr' a)
                                      exprFrom'
                                      ann
-    _   -> toSimpleExprStmt $ DestructuringAssign (map fromPyExpr exprs)
+    _   -> toSimpleExprStmt $ DestructuringAssign (map fromPyExpr' exprs)
                                                   exprFrom'
                                                   ann
 
@@ -203,8 +209,8 @@ fromPyStmt n@(P.Assign exprs exprFrom _) =
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.AugmentedAssign e1 op e2 _) =
   toSimpleExprStmt $ Assign (fromPyAssignOp op)
-                            (fromPyExpr e1)
-                            (fromPyExpr e2)
+                            (fromPyExpr' e1)
+                            (fromPyExpr' e2)
                             (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -218,7 +224,7 @@ fromPyStmt n@(P.Class name args body _) =
 --------------------------------------------------------------------------------
 -- | Return statements
 --------------------------------------------------------------------------------
-fromPyStmt n@(P.Return mExpr _) = Return (fmap fromPyExpr mExpr)
+fromPyStmt n@(P.Return mExpr _) = Return (fmap fromPyExpr' mExpr)
                                          (fromPyAnnotation n)
 
 --------------------------------------------------------------------------------

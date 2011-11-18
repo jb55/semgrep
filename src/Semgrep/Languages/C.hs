@@ -53,6 +53,12 @@ fromCConst (C.CStrConst cstring _) = StringLiteral (C.getCString cstring)
 fromCIdent :: I.Ident -> Identifier
 fromCIdent (I.Ident s i _) = Ident s (Just i) Nothing
 
+fromCStmt' :: C.CStat -> Node
+fromCStmt' = Stmt . fromCStmt
+
+fromCExpr' :: C.CExpr -> Node
+fromCExpr' = Expr . fromCExpr
+
 --------------------------------------------------------------------------------
 -- | Converts a C expression to a generic expression
 --------------------------------------------------------------------------------
@@ -64,8 +70,8 @@ fromCExpr n@(C.CVar ident _) = Var (fromCIdent ident)
 -- | Assignment expressions
 --------------------------------------------------------------------------------
 fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
-                                            (fromCExpr e1)
-                                            (fromCExpr e2)
+                                            (fromCExpr' e1)
+                                            (fromCExpr' e2)
                                             (toAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -78,24 +84,24 @@ fromCExpr n@(C.CConst c) = LiteralValue (fromCConst c)
 --------------------------------------------------------------------------------
 -- | Conditional operations (?:)
 --------------------------------------------------------------------------------
-fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr e1)
-                                                 (fmap fromCExpr e2)
-                                                 (fromCExpr e3)
+fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr' e1)
+                                                 (fmap fromCExpr' e2)
+                                                 (fromCExpr' e3)
                                                  (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Binary operations
 --------------------------------------------------------------------------------
 fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
-                                              (fromCExpr e1)
-                                              (fromCExpr e2)
+                                              (fromCExpr' e1)
+                                              (fromCExpr' e2)
                                               (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Function application
 --------------------------------------------------------------------------------
-fromCExpr n@(C.CCall expr exprs _) = Call (fromCExpr expr)
-                                          (map fromCExpr exprs)
+fromCExpr n@(C.CCall expr exprs _) = Call (fromCExpr' expr)
+                                          (map fromCExpr' exprs)
                                           (toAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -157,39 +163,41 @@ fromCStmt n@(C.CLabel ident stmt attrs _) = Label (fromCIdent ident)
 --------------------------------------------------------------------------------
 -- | Return statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CReturn mExpr _) = Return (fmap fromCExpr mExpr)
+fromCStmt n@(C.CReturn mExpr _) = Return (fmap fromCExpr' mExpr)
                                          (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Case statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr e1)
-                                         (fromCStmt s1)
+fromCStmt n@(C.CCase e1 s1 _) = CaseStmt (fromCExpr' e1)
+                                         (fromCStmt' s1)
                                          (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Case statement default case
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt s1) (toAnnotation n)
+fromCStmt n@(C.CDefault s1 _) = CaseStmtDefault (fromCStmt' s1) 
+                                                (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Expression statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) (toAnnotation n)
+fromCStmt n@(C.CExpr mExpr _) = ExprStmt (fmap fromCExpr mExpr) 
+                                         (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | If statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr e1)
-                                         (fromCStmt s1)
+fromCStmt n@(C.CIf e1 s1 ms1 _) = IfStmt (fromCExpr' e1)
+                                         (fromCStmt' s1)
                                          (fmap fromCStmt ms1)
                                          (toAnnotation n)
 
 --------------------------------------------------------------------------------
 -- | Switch statements
 --------------------------------------------------------------------------------
-fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr e1)
-                                             (fromCStmt s1)
+fromCStmt n@(C.CSwitch e1 s1 _) = SwitchStmt (fromCExpr' e1)
+                                             (fromCStmt' s1)
                                              (toAnnotation n)
 
 --------------------------------------------------------------------------------
@@ -199,8 +207,8 @@ fromCStmt n@(C.CCompound localLabels blockItems _) =
   let converted = map (stmtOrDecl . fromCCompoundBlock) blockItems
   in Block converted (toAnnotation n)
     where
-      stmtOrDecl (Left stmt)  = stmt
-      stmtOrDecl (Right decl) = DeclStmt decl
+      stmtOrDecl (Left stmt)  = Stmt stmt
+      stmtOrDecl (Right decl) = Decl decl
 
 --------------------------------------------------------------------------------
 -- | Unknoown statements

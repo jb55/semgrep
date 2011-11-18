@@ -133,11 +133,11 @@ data LiteralValue = IntLiteral Int
 data Expr = Var Identifier Annotation
           | CompoundExpr [Expr] Annotation
           | LiteralValue LiteralValue (Maybe String) Annotation
-          | BinaryOp BinOp Expr Expr Annotation
-          | Assign AssignOp Expr Expr Annotation
-          | DestructuringAssign [Expr] Expr Annotation
-          | ConditionalOp Expr (Maybe Expr) Expr Annotation
-          | Call Expr [Expr] Annotation
+          | BinaryOp BinOp Node Node Annotation
+          | Assign AssignOp Node Node Annotation
+          | DestructuringAssign [Node] Node Annotation
+          | ConditionalOp Node (Maybe Node) Node Annotation
+          | Call Node [Node] Annotation
           | UnkExpr String Annotation
        -- | CaseExpr
           deriving (Show, Typeable, Data)
@@ -153,12 +153,12 @@ data Expr = Var Identifier Annotation
 data Stmt = ExprStmt (Maybe Expr) Annotation
           | Label Identifier Stmt Annotation
           | DeclStmt Decl
-          | CaseStmt Expr Stmt Annotation
-          | CaseStmtDefault Stmt Annotation
-          | IfStmt Expr Stmt (Maybe Stmt) Annotation
-          | SwitchStmt Expr Stmt Annotation
-          | Block [Stmt] Annotation
-          | Return (Maybe Expr) Annotation
+          | CaseStmt Node Node Annotation
+          | CaseStmtDefault Node Annotation
+          | IfStmt Node Node (Maybe Stmt) Annotation
+          | SwitchStmt Node Node Annotation
+          | Block [Node] Annotation
+          | Return (Maybe Node) Annotation
           | Import [ImportItem] (Maybe Identifier) Annotation
           | UnkStmt String Annotation
           deriving (Show, Typeable, Data)
@@ -405,6 +405,9 @@ statements = listify (const True)
 
 imports :: (Data a) => a -> [Stmt]
 imports = filter isImport . statements
+
+nodes :: (Data a) => a -> [Node]
+nodes = listify (const True)
 
 expressions :: (Data a) => a -> [Expr]
 expressions = listify (const True)
