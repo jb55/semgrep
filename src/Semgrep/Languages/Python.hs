@@ -40,135 +40,139 @@ makePos f r c = Position Nothing (Just f) (Just r) (Just c)
 
 
 --------------------------------------------------------------------------------
--- | NodeInfo helper constructor
+-- | Pretty print to maybe string
 --------------------------------------------------------------------------------
-makeNode :: (Pretty n) => String -> Int -> Int -> n -> NodeInfo
-makeNode f r c n = NodeInfo (Just $ makePos f r c) (Just $ show $ pretty n)
+justShowP :: (Pretty a) => a -> Maybe String
+justShowP = Just . show . pretty
 
+--------------------------------------------------------------------------------
+-- | NInfo helper constructor
+--------------------------------------------------------------------------------
+makeNode :: (Pretty n) => String -> Int -> Int -> n -> NInfo
+makeNode f r c n = NInfo (Just $ makePos f r c)
+                         (Just . show . pretty $ n)
 
 --------------------------------------------------------------------------------
--- | Build a NodeInfo given a pretty printable node and SrcLocation
+-- | Build a NInfo given a pretty printable node and SrcLocation
 --------------------------------------------------------------------------------
-fromSpan :: (Pretty n) => n -> PyAnno -> Maybe NodeInfo
-fromSpan n (SpanCoLinear f r c _)    = Just $ makeNode f r c n
-fromSpan n (SpanMultiLine f r c _ _) = Just $ makeNode f r c n
-fromSpan n (SpanPoint f r c)         = Just $ makeNode f r c n
-fromSpan _ _                         = Nothing
+fromSpan :: (Pretty n) => n -> PyAnno -> NInfo
+fromSpan n (SpanCoLinear f r c _)    = makeNode f r c n
+fromSpan n (SpanMultiLine f r c _ _) = makeNode f r c n
+fromSpan n (SpanPoint f r c)         = makeNode f r c n
+fromSpan n _                         = NInfo Nothing (justShowP n)
 
 --------------------------------------------------------------------------------
 -- | Identifiers
 --------------------------------------------------------------------------------
 fromPyIdent :: P.Ident PyAnno -> Identifier
-fromPyIdent n@(P.Ident s _) = Ident s Nothing (fromPyAnnotation n)
+fromPyIdent n@(P.Ident s _) = Ident s Nothing (fromPyInfo n)
 
 --------------------------------------------------------------------------------
--- | Get NodeInfo out of an annotated Python node
+-- | Get NInfo out of an annotated Python node
 --------------------------------------------------------------------------------
-fromPyAnnotation :: (P.Annotated n, Pretty (n PyAnno))
-                 => n PyAnno
-                 -> Maybe NodeInfo
-fromPyAnnotation n = fromSpan n (P.annot n)
-
-
-fromPyStmt' :: PyStmt -> Node
-fromPyStmt' = Stmt . fromPyStmt
-
-fromPyExpr' :: PyExpr -> Node
-fromPyExpr' = Expr . fromPyExpr
+fromPyInfo :: (P.Annotated n, Pretty (n PyAnno))
+           => n PyAnno
+           -> NInfo
+fromPyInfo n = fromSpan n (P.annot n)
 
 --------------------------------------------------------------------------------
 -- | Expressions
 --------------------------------------------------------------------------------
-fromPyExpr :: PyExpr -> Expr
+fromPyExpr :: PyExpr -> Node
 fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
-                                                (fromPyExpr' e1)
-                                                (fromPyExpr' e2)
-                                                (fromPyAnnotation n)
+                                                (fromPyExpr e1)
+                                                (fromPyExpr e2)
+                                                (fromPyInfo n)
+                                                Expression
 
 --------------------------------------------------------------------------------
 -- | Variables
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Var ident _) = Var (fromPyIdent ident)
-                                   (fromPyAnnotation n)
+                                   (fromPyInfo n)
+                                   Expression
 
 --------------------------------------------------------------------------------
 -- | Int literals
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Int val lit _) = LiteralValue (IntLiteral $ fromInteger val)
-                                              (Just lit)
-                                              (fromPyAnnotation n)
+fromPyExpr n@(P.Int val lit _) = Literal (IntLiteral $ fromInteger val)
+                                         (Just lit)
+                                         (fromPyInfo n)
+                                         Expression
 
 --------------------------------------------------------------------------------
 -- | String literals
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Strings strs _) =
   let stringConsts   = map StringLiteral strs
-      ann            = fromPyAnnotation n
-      makeLiteralValue c = LiteralValue c Nothing Nothing
-      compoundExpr   = CompoundExpr (map makeLiteralValue stringConsts) ann
-  in case fromCompoundedStrings compoundExpr of
-    Nothing -> compoundExpr
-    Just x  -> x
+      ann            = fromPyInfo n
+      makeLiteral c  = Literal c Nothing (NInfo Nothing Nothing) Expression
+  in Compound (map makeLiteral stringConsts) ann Expression
+
 
 --------------------------------------------------------------------------------
 -- | Function application
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Call e args _) = Call (fromPyExpr' e)
-                                      []
-                                      (fromPyAnnotation n)
+fromPyExpr n@(P.Call e args _) = Call (fromPyExpr e) []
+                                      (fromPyInfo n)
+                                      Expression
 
 
 --------------------------------------------------------------------------------
 -- | Unknown expressions
 --------------------------------------------------------------------------------
-fromPyExpr e = UnkExpr (show $ pretty e) Nothing
+fromPyExpr e = UnkNode "" (fromPyInfo e) Expression
 
 
 --------------------------------------------------------------------------------
 -- | Convert Python if/elif to generic if statement
 --------------------------------------------------------------------------------
-fromPyElIf :: (PyExpr, [PyStmt]) -> Stmt
+fromPyElIf :: (PyExpr, [PyStmt]) -> Node
 fromPyElIf (expr, stmts) =
-  IfStmt (fromPyExpr' expr)
-         (Stmt . toBlock stmts $ Nothing)
-         Nothing
-         Nothing
+  If (fromPyExpr expr)
+     (toBlock stmts nullInfo Statement)
+     Nothing
+     nullInfo
+     Expression
 
 
 --------------------------------------------------------------------------------
 -- | Python 'Suite' to generic Block
 --------------------------------------------------------------------------------
-toBlock :: [PyStmt] -> Annotation -> Stmt
-toBlock stmts = Block (map fromPyStmt' stmts)
+toBlock :: [PyStmt] -> NInfo -> NKind -> Node
+toBlock stmts = Block (map fromPyStmt stmts)
 
 
 --------------------------------------------------------------------------------
--- | Convert a list of python if/elif statements into a single generic IfStmt
+-- | Convert a list of python if/elif statements into a single generic If
 --------------------------------------------------------------------------------
-fromPyIf :: Maybe PyStmt -> [(PyExpr, [PyStmt])] -> Maybe Stmt -> Maybe Stmt
+fromPyIf :: Maybe PyStmt -> [(PyExpr, [PyStmt])] -> Maybe Node -> Maybe Node
 -- If our if/elif list is empty, just return the else block (if it exists)
 fromPyIf _ [] el        = el
 fromPyIf cond (t:ts) el =
 
   -- Extract one if/elif expression and block statement
-  let (IfStmt e cs _ _) = fromPyElIf t
+  let (If e cs _ _ _) = fromPyElIf t
 
   -- Build a new if or elif, recursively applying this function
   -- for further elif/else statements
-  in Just $ IfStmt e cs (fromPyIf Nothing ts el)
-                        (join $ fmap fromPyAnnotation cond)
-
+  in Just $ If e cs (fromPyIf Nothing ts el)
+                    (case fmap fromPyInfo cond of
+                      Nothing -> nullInfo
+                      Just a  -> a)
+                    Statement
 
 --------------------------------------------------------------------------------
 -- | Function declarations
 --------------------------------------------------------------------------------
-fromPyStmt :: PyStmt -> Stmt
+fromPyStmt :: PyStmt -> Node
 fromPyStmt n@(P.Fun name' args result body _) =
-  let ann = fromPyAnnotation n
-  in DeclStmt $ Function (maybeToList $ fmap (Result . fromPyExpr) result)
-                         (Just $ fromPyIdent name')
-                         (toBlock body ann)
-                         ann
+  let ann = fromPyInfo n
+  in Function (maybeToList $ fmap (Result . fromPyExpr) result)
+              (Just $ fromPyIdent name')
+              (toBlock body ann Statement)
+              ann
+              Statement
 
 --------------------------------------------------------------------------------
 -- | Conditional if/elif/el statements
@@ -176,7 +180,7 @@ fromPyStmt n@(P.Fun name' args result body _) =
 fromPyStmt n@(P.Conditional ifs el a) =
   let maybeElse = case el of
                     [] -> Nothing
-                    el -> Just $ toBlock el Nothing
+                    el -> Just $ toBlock el nullInfo Statement
   in case fromPyIf (Just n) ifs maybeElse of
        Nothing  -> error "empty conditional"
        Just iff -> iff
@@ -185,66 +189,58 @@ fromPyStmt n@(P.Conditional ifs el a) =
 --------------------------------------------------------------------------------
 -- | Expression statements
 --------------------------------------------------------------------------------
-fromPyStmt n@(P.StmtExpr expr _) = ExprStmt (Just $ fromPyExpr expr)
-                                            (fromPyAnnotation n)
+fromPyStmt n@(P.StmtExpr expr _) = Singleton (fromPyExpr expr)
+                                             (fromPyInfo n)
+                                             Statement
 
 --------------------------------------------------------------------------------
 -- | Assignment statements
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.Assign exprs exprFrom _) =
-  let ann       = fromPyAnnotation n
-      exprFrom' = fromPyExpr' exprFrom
+  let ann       = fromPyInfo n
+      exprFrom' = fromPyExpr exprFrom
   in case exprs of
     []  -> error "empty assign"
-    [a] -> toSimpleExprStmt $ Assign DefaultAssign
-                                     (fromPyExpr' a)
-                                     exprFrom'
-                                     ann
-    _   -> toSimpleExprStmt $ DestructuringAssign (map fromPyExpr' exprs)
-                                                  exprFrom'
-                                                  ann
+    [a] -> Assign DefaultAssign (fromPyExpr a) exprFrom' ann Statement
+    _   -> DestructuringAssign (map fromPyExpr exprs) exprFrom' ann Statement
 
 --------------------------------------------------------------------------------
 -- | Augmented assignment statements (eg. +=, -=, etc)
 --------------------------------------------------------------------------------
-fromPyStmt n@(P.AugmentedAssign e1 op e2 _) =
-  toSimpleExprStmt $ Assign (fromPyAssignOp op)
-                            (fromPyExpr' e1)
-                            (fromPyExpr' e2)
-                            (fromPyAnnotation n)
+fromPyStmt n@(P.AugmentedAssign e1 op e2 _) = Assign (fromPyAssignOp op)
+                                                     (fromPyExpr e1)
+                                                     (fromPyExpr e2)
+                                                     (fromPyInfo n)
+                                                     Statement
 
 --------------------------------------------------------------------------------
 -- | Class statements
 --------------------------------------------------------------------------------
-fromPyStmt n@(P.Class name args body _) =
-  DeclStmt $ Class (fromPyIdent name)
-                   (map fromPyStmt body)
-                   (fromPyAnnotation n)
+fromPyStmt n@(P.Class name args body _) = Class (fromPyIdent name)
+                                                (map fromPyStmt body)
+                                                (fromPyInfo n)
+                                                Statement
 
 --------------------------------------------------------------------------------
 -- | Return statements
 --------------------------------------------------------------------------------
-fromPyStmt n@(P.Return mExpr _) = Return (fmap fromPyExpr' mExpr)
-                                         (fromPyAnnotation n)
+fromPyStmt n@(P.Return mExpr _) = Return (fmap fromPyExpr mExpr)
+                                         (fromPyInfo n)
+                                         Statement
 
 --------------------------------------------------------------------------------
 -- | Import statements
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.Import items _) = Import (map fromPyImportItem items)
                                          Nothing
-                                         (fromPyAnnotation n)
+                                         (fromPyInfo n)
+                                         Statement
 
 
 --------------------------------------------------------------------------------
 -- | Unknown statements
 --------------------------------------------------------------------------------
-fromPyStmt n = UnkStmt (show $ pretty n) (fromPyAnnotation n)
-
---------------------------------------------------------------------------------
--- | Simple expression statements
---------------------------------------------------------------------------------
-toSimpleExprStmt :: Expr -> Stmt
-toSimpleExprStmt a = ExprStmt (Just a) Nothing
+fromPyStmt n = UnkNode "" (fromPyInfo n) Statement
 
 --------------------------------------------------------------------------------
 -- | Convert a Python import item to a generic statement
@@ -253,7 +249,7 @@ fromPyImportItem :: P.ImportItem PyAnno -> ImportItem
 fromPyImportItem n@(P.ImportItem names maybeIdent _) =
   ImportItem (map fromPyIdent names)
              (fmap fromPyIdent maybeIdent)
-             (fromPyAnnotation n)
+             (fromPyInfo n)
 
 --------------------------------------------------------------------------------
 -- | Python 'augmented' assignment operators
@@ -277,9 +273,9 @@ fromPyAssignOp n                      = UnkAssign (show n)
 -- | Convert a Python module to a generic module
 --------------------------------------------------------------------------------
 fromPyModule :: PyModule -> Module
-fromPyModule a@(P.Module stmts) = Module (map (Stmt . fromPyStmt) stmts)
+fromPyModule a@(P.Module stmts) = Module (map fromPyStmt stmts)
                                          Nothing
-                                         Nothing
+                                         nullInfo
 
 
 --------------------------------------------------------------------------------

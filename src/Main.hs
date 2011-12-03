@@ -42,7 +42,7 @@ process file includes = do
         Left msg  -> print msg
         Right project -> do
           let allExprs = expressions project
-          let allStmts = filter (not . isDullStmt) $ statements project
+          let allStmts = statements project
           let conds = conditions allExprs
           let calls' = calls allExprs
           let nodes' = nodes project
