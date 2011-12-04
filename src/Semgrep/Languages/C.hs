@@ -113,11 +113,11 @@ fromCExpr e = UnkNode (gshow e) (toAnnotation e) Expression
 -- | Takes a CNode and returns a generic NodeInfo
 --------------------------------------------------------------------------------
 toAnnotation :: (C.Pretty a, C.Pos a) => a -> NInfo
-toAnnotation p = NInfo (makePos p) (makePretty p)
+toAnnotation p = NInfo (makePos' p) (makePretty p)
   where
-    makePretty   = Just . show . C.pretty
-    makePos      = Just . makePos' . C.posOf
-    makePos' pos = Position Nothing
+    makePretty    = Just . show . C.pretty
+    makePos'      = Just . makePos'' . C.posOf
+    makePos'' pos = Position Nothing
                             (Just $ C.posFile pos)
                             (Just $ C.posRow pos)
                             (Just $ C.posColumn pos)

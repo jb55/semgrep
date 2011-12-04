@@ -9,12 +9,21 @@ import           Control.Monad(foldM)
 import           Semgrep()
 
 
-data Position = Position
-              { posOffset :: Maybe Int
-              , posFilename :: Maybe String
-              , posLineNumber :: Maybe Int
-              , posColumnNumber :: Maybe Int
-              }
+data Position = PosSpanLine { pos_filename  :: String
+                            , pos_line      :: Int
+                            , pos_col_start :: Int
+                            , pos_col_end   :: Int
+                            }
+              | PosPoint { pos_filename :: String
+                         , pos_line     :: Int
+                         , pos_col      :: Int
+                         }
+              | PosSpanLines { pos_filename   :: String
+                             , pos_line_start :: Int
+                             , pos_line_end   :: Int
+                             , pos_col_start  :: Int
+                             , pos_col_end    :: Int
+                             }
               deriving (Data, Typeable)
 
 
@@ -386,6 +395,14 @@ statements = listify isExpr
 
 expressions :: (Data a) => a -> [Node]
 expressions = listify isStmt
+
+
+--------------------------------------------------------------------------------
+-- | Position helper constructor
+--------------------------------------------------------------------------------
+makePos :: String -> Int -> Int -> Int -> Position
+makePos f r c c_e = Position Nothing (Just f) (Just r) (Just c) (Just c_e)
+
 
 isExpr :: Node -> Bool
 isExpr (kind -> Expression) = True

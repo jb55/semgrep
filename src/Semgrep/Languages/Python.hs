@@ -33,13 +33,6 @@ fromPyOp o                 = UnkOp (gshow o)
 
 
 --------------------------------------------------------------------------------
--- | Position helper constructor
---------------------------------------------------------------------------------
-makePos :: String -> Int -> Int -> Position
-makePos f r c = Position Nothing (Just f) (Just r) (Just c)
-
-
---------------------------------------------------------------------------------
 -- | Pretty print to maybe string
 --------------------------------------------------------------------------------
 justShowP :: (Pretty a) => a -> Maybe String
