@@ -145,98 +145,98 @@ data CaseType = Match | Default
 --------------------------------------------------------------------------------
 data Node = Label { lbl_ident :: Identifier
                   , lbl_node  :: Node
-                  , lbl_info  :: NInfo
-                  , lbl_kind  :: NKind
+                  , node_info  :: NInfo
+                  , node_kind  :: NKind
                   }
           | Var { var_ident :: Identifier
-                , var_info  :: NInfo
-                , var_kind  :: NKind
+                , node_info  :: NInfo
+                , node_kind  :: NKind
                 }
           | Case { case_label :: Maybe Node
                  , case_type  :: CaseType
                  , case_body  :: Node
-                 , case_info :: NInfo
-                 , case_kind :: NKind
+                 , node_info :: NInfo
+                 , node_kind :: NKind
                  }
           | Singleton { sing_node :: Node
-                      , sing_info :: NInfo
-                      , sing_kind :: NKind
+                      , node_info :: NInfo
+                      , node_kind :: NKind
                       }
           | If { if_cond :: Node
                , if_body :: Node
                , if_else :: Maybe Node
-               , if_info :: NInfo
-               , if_kind :: NKind
+               , node_info :: NInfo
+               , node_kind :: NKind
                }
           | Switch { switch_cond :: Node
                    , switch_body :: Node
-                   , switch_info :: NInfo
-                   , switch_kind :: NKind
+                   , node_info :: NInfo
+                   , node_kind :: NKind
                    }
           | Compound { cmp_nodes :: [Node]
-                     , cmp_info  :: NInfo
-                     , cmp_kind  :: NKind
+                     , node_info  :: NInfo
+                     , node_kind  :: NKind
                      }
           | Block { block_nodes :: [Node]
-                  , block_info  :: NInfo
-                  , block_kind  :: NKind
+                  , node_info  :: NInfo
+                  , node_kind  :: NKind
                   }
           | Return { ret_body :: Maybe Node
-                   , ret_info :: NInfo
-                   , ret_kind :: NKind
+                   , node_info :: NInfo
+                   , node_kind :: NKind
                    }
           | Literal { lit_type :: Literal
                     , lit_str  :: Maybe String
-                    , lit_info :: NInfo
-                    , lit_kind :: NKind
+                    , node_info :: NInfo
+                    , node_kind :: NKind
                     }
           | BinaryOp { bin_op :: BinOp
                      , bin_node1 :: Node
                      , bin_node2 :: Node
-                     , bin_info :: NInfo
-                     , bin_kind :: NKind
+                     , node_info :: NInfo
+                     , node_kind :: NKind
                      }
           | Assign { asn_op :: AssignOp
                    , asn_to :: Node
                    , asn_from :: Node
-                   , asn_info :: NInfo
-                   , asn_kind :: NKind
+                   , node_info :: NInfo
+                   , node_kind :: NKind
                    }
           | DestructuringAssign { dasn_to :: [Node]
                                 , dasn_from :: Node
-                                , dasn_info :: NInfo
-                                , dasn_kind :: NKind
+                                , node_info :: NInfo
+                                , node_kind :: NKind
                                 }
           | ConditionalOp { condop_cond :: Node
                           , condop_body :: Maybe Node
                           , condop_else :: Node
-                          , condop_info :: NInfo
-                          , condop_kind :: NKind
+                          , node_info :: NInfo
+                          , node_kind :: NKind
                           }
           | Call { call_body :: Node
                  , call_args :: [Node]
-                 , call_info :: NInfo
-                 , call_kind :: NKind
+                 , node_info :: NInfo
+                 , node_kind :: NKind
                  }
           | Import { import_items :: [ImportItem]
                    , import_ident :: Maybe Identifier
-                   , import_info :: NInfo
-                   , import_kind :: NKind
+                   , node_info :: NInfo
+                   , node_kind :: NKind
                    }
           | Function { fun_props :: [DeclProp]
                      , fun_ident :: Maybe Identifier
                      , fun_body :: Node
-                     , fun_info :: NInfo
-                     , fun_kind :: NKind
+                     , node_info :: NInfo
+                     , node_kind :: NKind
                      }
           | Class { cls_name :: Identifier
                   , cls_body :: [Node]
-                  , cls_info :: NInfo
-                  , cls_kind :: NKind
+                  , node_info :: NInfo
+                  , node_kind :: NKind
                   }
           | UnkNode { unk_name :: String
-                    , unk_info :: NInfo
-                    , unk_kind :: NKind
+                    , node_info :: NInfo
+                    , node_kind :: NKind
                     }
           deriving (Show, Typeable, Data)
 
@@ -310,7 +310,7 @@ instance Named Node where
   name UnkNode {}               = "Unknown"
 
 instance Kind Node where
-  kind = nodeKind
+  kind = node_kind
 
 instance Named ImportItem where
   name ImportItem {} = "Import Item"
@@ -319,7 +319,7 @@ instance Named Identifier where
   name Ident {} = "Identifier"
 
 instance Info Node where
-  info = nodeInfo
+  info = node_info
 
 instance Info NInfo where
   info = id
@@ -337,27 +337,6 @@ instance MaybePos (Maybe Node) where
 type LanguageParser = FilePath -> IO (Either String Project)
 
 
-nodeKind :: Node -> NKind
-nodeKind Var { var_kind = k }                  = k
-nodeKind Literal { lit_kind = k }              = k
-nodeKind BinaryOp { bin_kind = k }             = k
-nodeKind Assign { asn_kind = k }               = k
-nodeKind DestructuringAssign { dasn_kind = k } = k
-nodeKind ConditionalOp { condop_kind = k }     = k
-nodeKind Call { call_kind = k }                = k
-nodeKind Class { cls_kind = k }                = k
-nodeKind Function { fun_kind = k }             = k
-nodeKind Label { lbl_kind = k }                = k
-nodeKind Case { case_kind = k }                = k
-nodeKind If { if_kind = k }                    = k
-nodeKind Switch { switch_kind = k }            = k
-nodeKind Block { block_kind = k }              = k
-nodeKind Import { import_kind = k }            = k
-nodeKind Return { ret_kind = k }               = k
-nodeKind Singleton { sing_kind = k }           = k
-nodeKind Compound { cmp_kind = k }             = k
-nodeKind UnkNode { unk_kind = k }              = k
-
 isCondOp :: BinOp -> Bool
 isCondOp LeOp   = True
 isCondOp GrOp   = True
@@ -369,28 +348,6 @@ isCondOp _      = False
 
 projectModules :: Project -> [Module]
 projectModules (Project mods) = mods
-
-nodeInfo :: Node -> NInfo
-nodeInfo Var { var_info = i }                  = i
-nodeInfo Literal { lit_info = i }              = i
-nodeInfo BinaryOp { bin_info = i }             = i
-nodeInfo Assign { asn_info = i }               = i
-nodeInfo DestructuringAssign { dasn_info = i } = i
-nodeInfo ConditionalOp { condop_info = i }     = i
-nodeInfo Call { call_info = i }                = i
-nodeInfo Class { cls_info = i }                = i
-nodeInfo Function { fun_info = i }             = i
-nodeInfo Label { lbl_info = i }                = i
-nodeInfo Case { case_info = i }                = i
-nodeInfo If { if_info = i }                    = i
-nodeInfo Switch { switch_info = i }            = i
-nodeInfo Block { block_info = i }              = i
-nodeInfo Import { import_info = i }            = i
-nodeInfo Return { ret_info = i }               = i
-nodeInfo Singleton { sing_info = i }           = i
-nodeInfo Compound { cmp_info = i }             = i
-nodeInfo UnkNode { unk_info = i }              = i
-
 
 infoPretty :: NInfo -> Maybe String
 infoPretty (NInfo _ p) = p
