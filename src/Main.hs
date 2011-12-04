@@ -5,7 +5,8 @@ module Main where
 import           Control.Monad()
 import           Data.Maybe()
 import qualified Semgrep.Languages.C as C
-import qualified Semgrep.Languages.Python as P
+import qualified Semgrep.Languages.Python as Py
+import qualified Semgrep.Languages.Javascript as Js
 import           System.Environment
 import           Data.List
 
@@ -27,7 +28,8 @@ pyVer opts = let maybePv = [pv | (PythonVersion pv) <- opts]
 getParser :: FilePath -> [Option] -> Maybe LanguageParser
 getParser f opts
   | ".c" `isInfixOf` f  = Just $ flip C.parse (allIncludes opts)
-  | ".py" `isInfixOf` f = Just $ P.parse (pyVer opts)
+  | ".py" `isInfixOf` f = Just $ Py.parse (pyVer opts)
+  | ".js" `isInfixOf` f = Just Js.parse
   | otherwise      = Nothing
 
 

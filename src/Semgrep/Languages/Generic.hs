@@ -40,8 +40,15 @@ addParens' :: Maybe String -> String
 addParens' = addParens id
 
 instance Show Position where
-  show (Position o f l c) =
-    try f "Unknown File" ++ ": (" ++ try' l ++ ", " ++ try' c ++ ")"
+  show (PosSpanLine f l s e) =
+    concat [f, ": (", show l, ", ", show s, "-", show e, ")"]
+
+  show (PosPoint f l c) =
+    concat [f, ": (", show l, ", ", show c, ")"]
+
+  show (PosSpanLines f ls le cs ce) =
+    concat [f, ": (", show ls, "-", show le, ", ", show cs, "-", show ce, ")"]
+
 
 instance Show NInfo where
   show (NInfo p s) =
@@ -54,7 +61,7 @@ instance Show NInfo where
 -- | NInfo contains generic node information such as the position of the node
 --   in the document
 --------------------------------------------------------------------------------
-data NInfo = NInfo { info_pos :: Maybe Position
+data NInfo = NInfo { info_pos    :: Maybe Position
                    , info_pretty :: Maybe String
                    }
                    deriving (Data, Typeable)
@@ -236,7 +243,7 @@ data Node = Label { lbl_ident :: Identifier
 --------------------------------------------------------------------------------
 -- | Node Kind
 --------------------------------------------------------------------------------
-data NKind = Statement | Expression | Declaration
+data NKind = Statement | Expression | Declaration | Unknown
            deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
@@ -290,7 +297,9 @@ instance Named Node where
   name ConditionalOp {}         = "Conditional Operator"
   name Call {}                  = "Function Call"
   name Class {}                 = "Class"
+  name Compound {}              = "Compound"
   name Function {}              = "Function"
+  name Singleton {}             = "Singleton"
   name Label {}                 = "Label"
   name Case {}                  = "Case"
   name If {}                    = "If"
@@ -298,7 +307,7 @@ instance Named Node where
   name Block {}                 = "Block"
   name Import {}                = "Import"
   name Return {}                = "Return"
-  name _                        = "Unknown"
+  name UnkNode {}               = "Unknown"
 
 instance Kind Node where
   kind = nodeKind
@@ -395,13 +404,6 @@ statements = listify isExpr
 
 expressions :: (Data a) => a -> [Node]
 expressions = listify isStmt
-
-
---------------------------------------------------------------------------------
--- | Position helper constructor
---------------------------------------------------------------------------------
-makePos :: String -> Int -> Int -> Int -> Position
-makePos f r c c_e = Position Nothing (Just f) (Just r) (Just c) (Just c_e)
 
 
 isExpr :: Node -> Bool

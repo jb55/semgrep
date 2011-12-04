@@ -117,10 +117,9 @@ toAnnotation p = NInfo (makePos' p) (makePretty p)
   where
     makePretty    = Just . show . C.pretty
     makePos'      = Just . makePos'' . C.posOf
-    makePos'' pos = Position Nothing
-                            (Just $ C.posFile pos)
-                            (Just $ C.posRow pos)
-                            (Just $ C.posColumn pos)
+    makePos'' pos = PosPoint (C.posFile pos)
+                             (C.posRow pos)
+                             (C.posColumn pos)
 
 
 --------------------------------------------------------------------------------
@@ -256,8 +255,10 @@ fromCTranslUnit n@(C.CTranslUnit extDecls _) =
             ann
 
 translUnitModuleName :: C.CTranslUnit -> Maybe String
-translUnitModuleName =
-  return . fileNameToModuleName <=< posFilename <=< posOf . toAnnotation
+translUnitModuleName t = do
+  pos <- posOf . toAnnotation $ t
+  let filename = pos_filename pos
+  return $ fileNameToModuleName filename
 
 fileNameToModuleName :: String -> String
 fileNameToModuleName = takeWhile (/= '.')

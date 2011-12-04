@@ -39,20 +39,13 @@ justShowP :: (Pretty a) => a -> Maybe String
 justShowP = Just . show . pretty
 
 --------------------------------------------------------------------------------
--- | NInfo helper constructor
---------------------------------------------------------------------------------
-makeNode :: (Pretty n) => String -> Int -> Int -> n -> NInfo
-makeNode f r c n = NInfo (Just $ makePos f r c)
-                         (Just . show . pretty $ n)
-
---------------------------------------------------------------------------------
 -- | Build a NInfo given a pretty printable node and SrcLocation
 --------------------------------------------------------------------------------
-fromSpan :: (Pretty n) => n -> PyAnno -> NInfo
-fromSpan n (SpanCoLinear f r c _)    = makeNode f r c n
-fromSpan n (SpanMultiLine f r c _ _) = makeNode f r c n
-fromSpan n (SpanPoint f r c)         = makeNode f r c n
-fromSpan n _                         = NInfo Nothing (justShowP n)
+fromSpan :: PyAnno -> Maybe Position
+fromSpan (SpanCoLinear f r cs ce)      = Just $ PosSpanLine f r cs ce
+fromSpan (SpanMultiLine f rs cs re ce) = Just $ PosSpanLines f rs re cs ce
+fromSpan (SpanPoint f r c)             = Just $ PosPoint f r c
+fromSpan _                             = Nothing
 
 --------------------------------------------------------------------------------
 -- | Identifiers
@@ -66,7 +59,9 @@ fromPyIdent n@(P.Ident s _) = Ident s Nothing (fromPyInfo n)
 fromPyInfo :: (P.Annotated n, Pretty (n PyAnno))
            => n PyAnno
            -> NInfo
-fromPyInfo n = fromSpan n (P.annot n)
+fromPyInfo n = let pos = fromSpan $ P.annot n
+                   prt = Just . show . pretty $ n
+               in NInfo pos prt
 
 --------------------------------------------------------------------------------
 -- | Expressions
@@ -289,8 +284,8 @@ parse ver f = do
                  Python2 -> P2.parseModule
                  Python3 -> P3.parseModule
   let result = parser content f
-  case result of
-    Left pe               -> return $ Left (show pe)
-    Right (mod, comments) -> return $ Right $ Project [fromPyModule mod]
+  return $ case result of
+    Left pe               -> Left (show pe)
+    Right (mod, comments) -> Right $ Project [fromPyModule mod]
 
 
