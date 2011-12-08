@@ -6,15 +6,20 @@ import qualified Language.Python.Common.AST as P
 import           Language.Python.Common.SrcLocation
 import           Language.Python.Version2.Parser as P2
 import           Language.Python.Version3.Parser as P3
-import           Language.Python.Common.Pretty
+import qualified Language.Python.Common.Pretty as Pr
 import           Language.Python.Common.PrettyAST()
 import           Semgrep.Languages.Generic
 import           Control.Monad
 import           Data.Generics
+import           Data.Monoid
 import           Data.Maybe(maybeToList)
 import           System.IO
 import           Semgrep ( PythonVersion(..)
                          )
+
+instance Monoid Pr.Doc where
+  mempty = Pr.empty
+  mappend = (Pr.<>)
 
 type PyAnno = SrcSpan
 type PyStmt     = P.Statement PyAnno
@@ -35,11 +40,11 @@ fromPyOp o                 = UnkOp (gshow o)
 --------------------------------------------------------------------------------
 -- | Pretty print to maybe string
 --------------------------------------------------------------------------------
-justShowP :: (Pretty a) => a -> Maybe String
-justShowP = Just . show . pretty
+justShowP :: (Pr.Pretty a) => a -> Maybe String
+justShowP = Just . show . Pr.pretty
 
 --------------------------------------------------------------------------------
--- | Build a NInfo given a pretty printable node and SrcLocation
+-- | Build a NInfo given a Pr.pretty printable node and SrcLocation
 --------------------------------------------------------------------------------
 fromSpan :: PyAnno -> Maybe Position
 fromSpan (SpanCoLinear f r cs ce)      = Just $ PosSpanLine f r cs ce
@@ -54,14 +59,30 @@ fromPyIdent :: P.Ident PyAnno -> Identifier
 fromPyIdent n@(P.Ident s _) = Ident s Nothing (fromPyInfo n)
 
 --------------------------------------------------------------------------------
+-- | Pretty print a list of nodes
+--------------------------------------------------------------------------------
+prettyNodes :: (P.Annotated n, Pr.Pretty (n PyAnno)) => [n PyAnno] -> String
+prettyNodes = show . mconcat . map Pr.pretty
+
+--------------------------------------------------------------------------------
 -- | Get NInfo out of an annotated Python node
 --------------------------------------------------------------------------------
-fromPyInfo :: (P.Annotated n, Pretty (n PyAnno))
-           => n PyAnno
-           -> NInfo
-fromPyInfo n = let pos = fromSpan $ P.annot n
-                   prt = Just . show . pretty $ n
-               in NInfo pos prt
+fromPyInfo :: (P.Annotated n, Pr.Pretty (n PyAnno)) => n PyAnno -> NInfo
+fromPyInfo n = NInfo pos prt
+  where
+    pos = fromSpan . P.annot $ n
+    prt = Just . show . Pr.pretty $ n
+
+infoForNodes :: (P.Annotated n, Pr.Pretty (n PyAnno)) => [n PyAnno] -> NInfo
+infoForNodes nodes = NInfo pos prt
+  where
+    pos = spanNodes nodes
+    prt = Just $ prettyNodes nodes
+
+spanNodes :: (P.Annotated n, Pr.Pretty (n PyAnno))
+          => [n PyAnno]
+          -> Maybe Position
+spanNodes = mergeSpan' . map (fromSpan . P.annot)
 
 --------------------------------------------------------------------------------
 -- | Expressions
@@ -91,11 +112,12 @@ fromPyExpr n@(P.Int val lit _) = Literal (IntLiteral $ fromInteger val)
 --------------------------------------------------------------------------------
 -- | String literals
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Strings strs _) =
-  let stringConsts   = map StringLiteral strs
-      ann            = fromPyInfo n
-      makeLiteral c  = Literal c Nothing (NInfo Nothing Nothing) Expression
-  in Compound (map makeLiteral stringConsts) ann Expression
+fromPyExpr n@(P.Strings strs _) = Compound lits ann Expression
+  where
+    ann            = fromPyInfo n
+    litInfo c      = NInfo Nothing (Just c)
+    makeLiteral c  = Literal (StringLiteral c) Nothing (litInfo c) Expression
+    lits           = map makeLiteral strs
 
 
 --------------------------------------------------------------------------------
@@ -116,13 +138,13 @@ fromPyExpr e = UnkNode "" (fromPyInfo e) Expression
 -- | Convert Python if/elif to generic if statement
 --------------------------------------------------------------------------------
 fromPyElIf :: (PyExpr, [PyStmt]) -> Node
-fromPyElIf (expr, stmts) =
-  If (fromPyExpr expr)
-     (toBlock stmts nullInfo Statement)
-     Nothing
-     nullInfo
-     Expression
-
+fromPyElIf (expr, stmts) = If e1 block Nothing i Expression
+  where
+    e1        = fromPyExpr expr
+    i         = fromPyInfo expr
+    pr        = Just $ prettyNodes stmts
+    blockInfo = NInfo (spanNodes stmts) Nothing
+    block     = toBlock stmts blockInfo Statement
 
 --------------------------------------------------------------------------------
 -- | Python 'Suite' to generic Block
@@ -155,12 +177,14 @@ fromPyIf cond (t:ts) el =
 --------------------------------------------------------------------------------
 fromPyStmt :: PyStmt -> Node
 fromPyStmt n@(P.Fun name' args result body _) =
-  let ann = fromPyInfo n
-  in Function (maybeToList $ fmap (Result . fromPyExpr) result)
-              (Just $ fromPyIdent name')
-              (toBlock body ann Statement)
-              ann
-              Statement
+  Function declProps ident block i Statement
+    where
+      declProps = maybeToList $ fmap (Result . fromPyExpr) result
+      block     = toBlock body blockInfo Statement
+      blockInfo = NInfo blockSpan Nothing
+      blockSpan = spanNodes body
+      ident     = Just $ fromPyIdent name'
+      i         = fromPyInfo n
 
 --------------------------------------------------------------------------------
 -- | Conditional if/elif/el statements
@@ -168,7 +192,7 @@ fromPyStmt n@(P.Fun name' args result body _) =
 fromPyStmt n@(P.Conditional ifs el a) =
   let maybeElse = case el of
                     [] -> Nothing
-                    el -> Just $ toBlock el nullInfo Statement
+                    _  -> Just $ toBlock el (fromPyInfo $ head el) Statement
   in case fromPyIf (Just n) ifs maybeElse of
        Nothing  -> error "empty conditional"
        Just iff -> iff
@@ -191,6 +215,7 @@ fromPyStmt n@(P.Assign exprs exprFrom _) =
     []  -> error "empty assign"
     [a] -> Assign DefaultAssign (fromPyExpr a) exprFrom' ann Statement
     _   -> DestructuringAssign (map fromPyExpr exprs) exprFrom' ann Statement
+
 
 --------------------------------------------------------------------------------
 -- | Augmented assignment statements (eg. +=, -=, etc)

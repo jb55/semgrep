@@ -4,28 +4,38 @@
 module Semgrep.Languages.Generic where
 
 import           Data.Generics
+import           Data.Monoid
 import           Data.Maybe(isJust)
 import           Control.Monad(foldM)
 import           Semgrep()
 
 
-data Position = PosSpanLine { pos_filename  :: String
-                            , pos_line      :: Int
-                            , pos_col_start :: Int
-                            , pos_col_end   :: Int
+data Position = PosSpanLine { pos_filename :: String
+                            , pos_line     :: Int
+                            , pos_col      :: Int
+                            , pos_col_end  :: Int
                             }
               | PosPoint { pos_filename :: String
                          , pos_line     :: Int
                          , pos_col      :: Int
                          }
-              | PosSpanLines { pos_filename   :: String
-                             , pos_line_start :: Int
-                             , pos_line_end   :: Int
-                             , pos_col_start  :: Int
-                             , pos_col_end    :: Int
+              | PosSpanLines { pos_filename :: String
+                             , pos_line     :: Int
+                             , pos_line_end :: Int
+                             , pos_col      :: Int
+                             , pos_col_end  :: Int
                              }
               deriving (Data, Typeable)
 
+posLineEnd :: Position -> Int
+posLineEnd p@(PosSpanLine {})  = pos_line p
+posLineEnd p@(PosSpanLines {}) = pos_line_end p
+posLineEnd p@(PosPoint {})     = pos_line p
+
+posColEnd :: Position -> Int
+posColEnd p@(PosSpanLine {})  = pos_col_end p
+posColEnd p@(PosSpanLines {}) = pos_col_end p
+posColEnd p@(PosPoint {})     = pos_col p
 
 try' :: (Show a) => Maybe a -> String
 try' = maybe "??" show
@@ -327,6 +337,9 @@ instance Info NInfo where
 instance MaybePos NInfo where
   posOf (info_pos -> p) = p
 
+instance MaybePos (Maybe Position) where
+  posOf = id
+
 instance MaybePos Node where
   posOf (info -> n) = posOf n
 
@@ -402,8 +415,30 @@ isDullNode node = or $ map ($node) dulls
 imports :: [Node] -> [Node]
 imports = filter isImport
 
-nodes :: (Data a) => a -> [Node]
-nodes = listify (const True)
+mergeSpan' :: (MaybePos a) => [a] -> Maybe Position
+mergeSpan' ps = mergeSpan [a | Just a <- map posOf ps]
+
+mergeSpan :: [Position] -> Maybe Position
+mergeSpan []     = Nothing
+mergeSpan [a]    = Just a
+mergeSpan (a:as) = foldM append a as
+  where
+    append p1 p2
+      | f1 /= f2       = Nothing
+      | startC == endC = Just $ PosPoint f1 startL startC
+      | startL /= endL = Just $ PosSpanLines f1 startL endL startC endC
+      | otherwise      = Just $ PosSpanLine f1 startL startC endC
+      where
+        f1     = pos_filename p1
+        f2     = pos_filename p2
+        startL = pos_line p1   `min` pos_line p2
+        startC = pos_col p1    `min` pos_col p2
+        endL   = posLineEnd p1 `max` posLineEnd p2
+        endC   = posColEnd p1  `max` posColEnd p2
+
+
+nodesFromData :: (Data a) => a -> [Node]
+nodesFromData = listify (const True)
 
 calls :: [Node] -> [Node]
 calls = filter isCall

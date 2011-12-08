@@ -47,7 +47,7 @@ process file includes = do
           let allStmts = statements project
           let conds = conditions allExprs
           let calls' = calls allExprs
-          let nodes' = nodes project
+          let nodes' = nodesFromData project
 
           putStrLn "\nAll Nodes"
           mapM_ (putStrLn . namedInfo) nodes'

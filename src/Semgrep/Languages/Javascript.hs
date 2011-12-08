@@ -14,7 +14,7 @@ fromSpan' (J.SpanPoint f r c)             = Just $ PosPoint f r c
 fromSpan' (J.SpanEmpty {})                = Nothing
 
 infoFromNode :: J.JSNode -> NInfo
-infoFromNode (J.NS n span) = 
+infoFromNode (J.NS n span) =
   NInfo (fromSpan' span) (Just $ take 20 $ show n)
 
 jnode :: J.JSNode -> J.Node
@@ -37,7 +37,7 @@ fromJsNode n@(jnode -> J.JSExpression nodes) =
 --------------------------------------------------------------------------------
 -- | Top level node for holding nodes
 --------------------------------------------------------------------------------
-fromJsNode n@(jnode -> J.JSSourceElementsTop nodes) = 
+fromJsNode n@(jnode -> J.JSSourceElementsTop nodes) =
   Compound (map fromJsNode nodes) (infoFromNode n) Statement
 
 --------------------------------------------------------------------------------
@@ -51,7 +51,7 @@ fromJsNode n@(jnode -> J.JSIfElse n1 n2 n3) =
      Statement
 
 fromJsNode n@(jnode -> J.JSIf n1 n2) =
-  If (fromJsNode n1) 
+  If (fromJsNode n1)
      (fromJsNode n2)
      Nothing
      (infoFromNode n)
@@ -66,10 +66,10 @@ fromJsNode n@(J.NS ns span) = UnkNode (show ns) (infoFromNode n) Unknown
 -- | Simple module constructor
 --------------------------------------------------------------------------------
 moduleFromNode :: J.JSNode -> Module
-moduleFromNode n@(jnode -> J.JSSourceElementsTop nodes) = 
+moduleFromNode n@(jnode -> J.JSSourceElementsTop nodes) =
   Module (map fromJsNode nodes) Nothing (infoFromNode n)
 
-moduleFromNode node = 
+moduleFromNode node =
   Module [fromJsNode node] Nothing (infoFromNode node)
 
 
@@ -82,4 +82,4 @@ parse file = do
   return $ case P.parse content file of
     Left parseError -> Left $ show parseError
     Right node      -> Right $ Project [moduleFromNode node]
-    --Right node      -> Left $ show node 
+    --Right node      -> Left $ show node
