@@ -17,3 +17,4 @@ The goal is to provide a tool for working with *programming languages*.
   from the generic AST is probably wishful thinking. This may be quite hard,
   need to look into this a bit more.
  
+- Refactoring. s/someFunction(A, B)/someFunction(B, A)/
