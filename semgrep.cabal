@@ -12,6 +12,6 @@ executable semgrep
                    , language-python >= 0.4 && < 0.5
                    , pretty
                    , MissingH
-                   , language-javascript == 0.4.10
+                   , language-javascript == 0.5.1
   ghc-options:     -W
 

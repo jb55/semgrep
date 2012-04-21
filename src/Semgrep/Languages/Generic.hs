@@ -233,8 +233,7 @@ data Node = Label { lbl_ident :: Identifier
                    , node_info :: NInfo
                    , node_kind :: NKind
                    }
-          | Function { fun_props :: [DeclProp]
-                     , fun_ident :: Maybe Identifier
+          | Function { fun_ident :: Maybe Identifier
                      , fun_body :: Node
                      , node_info :: NInfo
                      , node_kind :: NKind
@@ -248,19 +247,60 @@ data Node = Label { lbl_ident :: Identifier
                     , node_info :: NInfo
                     , node_kind :: NKind
                     }
+          | Discard { node_info :: NInfo
+                    , node_kind :: NKind
+                    }
           deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
 -- | Node Kind
 --------------------------------------------------------------------------------
-data NKind = Statement | Expression | Declaration | Unknown
+data NKind = Statement
+           | Expression { kind_props :: [Prop]
+                        }
+           | Declaration { decl_init  :: Maybe Node
+                         , kind_props :: [Prop]
+                         }
+           | Unknown
            deriving (Show, Typeable, Data)
+
+--------------------------------------------------------------------------------
+-- | Storage Spec
+--------------------------------------------------------------------------------
+data Storage = Auto
+             | Register
+             | Static
+             | Extern
+             | Typedef
+             | Thread
+             deriving (Show, Eq, Read, Data, Typeable)
+
+--------------------------------------------------------------------------------
+-- | Type Spec
+--------------------------------------------------------------------------------
+data Type = VoidType
+          | CharType
+          | ShortType
+          | IntType
+          | LongType
+          | FloatType
+          | DoubleType
+          | SignedType
+          | UnsignedType
+          | BoolType
+          | ComplexType
+          | AlgebraicType
+          | StructType
+          | EnumType
+          deriving (Show, Eq, Read, Data, Typeable)
 
 --------------------------------------------------------------------------------
 -- | Declaration Properties
 --------------------------------------------------------------------------------
-data DeclProp = Result Node
-              deriving (Show, Typeable, Data)
+data Prop = Storage Storage
+          | Type Type
+          | Result Node
+          deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
 -- | Import items
@@ -271,7 +311,11 @@ data ImportItem = ImportItem [Identifier] (Maybe Identifier) NInfo
 --------------------------------------------------------------------------------
 -- | Identifiers
 --------------------------------------------------------------------------------
-data Identifier = Ident String (Maybe Int) NInfo
+data Identifier = Ident {
+                  ident_name   :: String
+                , ident_mayint :: Maybe Int
+                , ident_info   :: NInfo
+                }
                 deriving (Show, Typeable, Data)
 
 --------------------------------------------------------------------------------
@@ -317,6 +361,7 @@ instance Named Node where
   name Block {}                 = "Block"
   name Import {}                = "Import"
   name Return {}                = "Return"
+  name Discard {}               = "Discard"
   name UnkNode {}               = "Unknown"
 
 instance Kind Node where
@@ -375,10 +420,13 @@ statements = listify isExpr
 expressions :: (Data a) => a -> [Node]
 expressions = listify isStmt
 
+expression  = Expression []
+declaration = Declaration Nothing []
+
 
 isExpr :: Node -> Bool
-isExpr (kind -> Expression) = True
-isExpr _                    = False
+isExpr (kind -> Expression{}) = True
+isExpr _                      = False
 
 isCond :: Node -> Bool
 isCond ConditionalOp {}         = True
@@ -411,6 +459,9 @@ isCompound _          = False
 isDullNode :: Node -> Bool
 isDullNode node = or $ map ($node) dulls
   where dulls = []
+
+discard :: Node
+discard = Discard nullInfo expression
 
 imports :: [Node] -> [Node]
 imports = filter isImport
@@ -445,6 +496,11 @@ calls = filter isCall
 
 conditions :: [Node] -> [Node]
 conditions = filter isCond
+
+isDiscard Discard{} = True
+isDiscard _         = False
+
+isntDiscard = not . isDiscard
 
 isUnk = isJust . unk
 

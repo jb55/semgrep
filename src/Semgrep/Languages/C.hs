@@ -59,7 +59,7 @@ fromCIdent (I.Ident s i _) = Ident s (Just i) nullInfo
 fromCExpr :: C.CExpr -> Node
 fromCExpr n@(C.CVar ident _) = Var (fromCIdent ident)
                                    (toAnnotation n)
-                                   Expression
+                                   expression
 
 --------------------------------------------------------------------------------
 -- | Assignment expressions
@@ -68,7 +68,7 @@ fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
                                             (fromCExpr e1)
                                             (fromCExpr e2)
                                             (toAnnotation n)
-                                            Expression
+                                            expression
 
 --------------------------------------------------------------------------------
 -- | Literal values
@@ -76,7 +76,7 @@ fromCExpr n@(C.CAssign op e1 e2 _) = Assign (fromCAssignOp op)
 fromCExpr n@(C.CConst c) = Literal (fromCConst c)
                                    Nothing
                                    (toAnnotation n)
-                                   Expression
+                                   expression
 
 --------------------------------------------------------------------------------
 -- | Conditional operations (?:)
@@ -85,7 +85,7 @@ fromCExpr n@(C.CCond e1 e2 e3 _) = ConditionalOp (fromCExpr e1)
                                                  (fmap fromCExpr e2)
                                                  (fromCExpr e3)
                                                  (toAnnotation n)
-                                                 Expression
+                                                 expression
 
 --------------------------------------------------------------------------------
 -- | Binary operations
@@ -94,7 +94,7 @@ fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
                                               (fromCExpr e1)
                                               (fromCExpr e2)
                                               (toAnnotation n)
-                                              Expression
+                                              expression
 
 --------------------------------------------------------------------------------
 -- | Function application
@@ -102,12 +102,12 @@ fromCExpr n@(C.CBinary op e1 e2 _) = BinaryOp (fromCBinOp op)
 fromCExpr n@(C.CCall expr exprs _) = Call (fromCExpr expr)
                                           (map fromCExpr exprs)
                                           (toAnnotation n)
-                                          Expression
+                                          expression
 
 --------------------------------------------------------------------------------
 -- | Unknown expressions
 --------------------------------------------------------------------------------
-fromCExpr e = UnkNode (gshow e) (toAnnotation e) Expression
+fromCExpr e = UnkNode (gshow e) (toAnnotation e) expression
 
 --------------------------------------------------------------------------------
 -- | Takes a CNode and returns a generic NodeInfo
@@ -142,7 +142,7 @@ allCExprs = listify (const True)
 
 
 fromCDecl :: C.CDecl -> Node
-fromCDecl (C.CDecl {}) = UnkNode "not implemented" nullInfo Declaration
+fromCDecl (C.CDecl {}) = UnkNode "not implemented" nullInfo declaration
 
 
 fromCCompoundBlock :: C.CBlockItem -> Node
@@ -186,7 +186,7 @@ fromCStmt n@(C.CDefault s1 _) = Case Nothing
                                      Statement
 
 --------------------------------------------------------------------------------
--- | Expression statements
+-- | expression statements
 --------------------------------------------------------------------------------
 fromCStmt n@(C.CExpr mExpr   _) =
   let ann  = toAnnotation n
@@ -233,7 +233,7 @@ fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
   let name  = Nothing
       stmt' = fromCStmt stmt
       node  = toAnnotation n
-  in Function [] name stmt' node Declaration
+  in Function name stmt' node declaration
 
 --------------------------------------------------------------------------------
 -- | CExtDecl to Decl
@@ -241,7 +241,7 @@ fromCFunctionDef n@(C.CFunDef declSpecs d1 d2 stmt _) =
 fromCExtDecl :: C.CExtDecl -> Node
 fromCExtDecl (C.CFDefExt d) = fromCFunctionDef d
 fromCExtDecl (C.CDeclExt d) = fromCDecl d
-fromCExtDecl n = UnkNode (gshow n) (toAnnotation n) Declaration
+fromCExtDecl n = UnkNode (gshow n) (toAnnotation n) declaration
 
 
 --------------------------------------------------------------------------------

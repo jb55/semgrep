@@ -81,21 +81,21 @@ spanNodes :: (P.Annotated n, Pr.Pretty (n PyAnno))
 spanNodes = mergeSpan' . map (fromSpan . P.annot)
 
 --------------------------------------------------------------------------------
--- | Expressions
+-- | expressions
 --------------------------------------------------------------------------------
 fromPyExpr :: PyExpr -> Node
 fromPyExpr n@(P.BinaryOp op e1 e2 _) = BinaryOp (fromPyOp op)
                                                 (fromPyExpr e1)
                                                 (fromPyExpr e2)
                                                 (fromPyInfo n)
-                                                Expression
+                                                expression
 
 --------------------------------------------------------------------------------
 -- | Variables
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Var ident _) = Var (fromPyIdent ident)
                                    (fromPyInfo n)
-                                   Expression
+                                   expression
 
 --------------------------------------------------------------------------------
 -- | Int literals
@@ -103,16 +103,16 @@ fromPyExpr n@(P.Var ident _) = Var (fromPyIdent ident)
 fromPyExpr n@(P.Int val lit _) = Literal (IntLiteral $ fromInteger val)
                                          (Just lit)
                                          (fromPyInfo n)
-                                         Expression
+                                         expression
 
 --------------------------------------------------------------------------------
 -- | String literals
 --------------------------------------------------------------------------------
-fromPyExpr n@(P.Strings strs _) = Compound lits ann Expression
+fromPyExpr n@(P.Strings strs _) = Compound lits ann expression
   where
     ann            = fromPyInfo n
     litInfo c      = NInfo Nothing (Just c)
-    makeLiteral c  = Literal (StringLiteral c) Nothing (litInfo c) Expression
+    makeLiteral c  = Literal (StringLiteral c) Nothing (litInfo c) expression
     lits           = map makeLiteral strs
 
 
@@ -121,20 +121,20 @@ fromPyExpr n@(P.Strings strs _) = Compound lits ann Expression
 --------------------------------------------------------------------------------
 fromPyExpr n@(P.Call e args _) = Call (fromPyExpr e) []
                                       (fromPyInfo n)
-                                      Expression
+                                      expression
 
 
 --------------------------------------------------------------------------------
 -- | Unknown expressions
 --------------------------------------------------------------------------------
-fromPyExpr e = UnkNode "" (fromPyInfo e) Expression
+fromPyExpr e = UnkNode "" (fromPyInfo e) expression
 
 
 --------------------------------------------------------------------------------
 -- | Convert Python if/elif to generic if statement
 --------------------------------------------------------------------------------
 fromPyElIf :: (PyExpr, [PyStmt]) -> Node
-fromPyElIf (expr, stmts) = If e1 block Nothing i Expression
+fromPyElIf (expr, stmts) = If e1 block Nothing i expression
   where
     e1        = fromPyExpr expr
     i         = fromPyInfo expr
@@ -173,7 +173,10 @@ fromPyIf cond (t:ts) el =
 --------------------------------------------------------------------------------
 fromPyStmt :: PyStmt -> Node
 fromPyStmt n@(P.Fun name' args result body _) =
-  Function declProps ident block i Statement
+  Function ident block i Declaration {
+    decl_init  = Nothing
+  , kind_props = declProps
+  }
     where
       declProps = maybeToList $ fmap (Result . fromPyExpr) result
       block     = toBlock body blockInfo Statement
@@ -195,7 +198,7 @@ fromPyStmt n@(P.Conditional ifs el a) =
 
 
 --------------------------------------------------------------------------------
--- | Expression statements
+-- | expression statements
 --------------------------------------------------------------------------------
 fromPyStmt n@(P.StmtExpr expr _) = Singleton (fromPyExpr expr)
                                              (fromPyInfo n)

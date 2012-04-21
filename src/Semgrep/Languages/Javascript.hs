@@ -9,6 +9,8 @@ import           Data.String.Utils (lstrip)
 import           System.IO
 import           Semgrep.Languages.Generic
 import           Debug.Trace (trace)
+import           Data.List (intercalate)
+import           Data.Maybe (fromMaybe)
 
 pp = PP.renderToString
 
@@ -40,7 +42,7 @@ fromJsNode n@(jnode -> J.JSBlock _ nodes _) =
   Block (map fromJsNode nodes) (infoFromNode n) Statement
 
 fromJsNode n@(jnode -> J.JSExpression nodes) =
-  Block (map fromJsNode nodes) (infoFromNode n) Statement
+  Compound (map fromJsNode nodes) (infoFromNode n) expression
 
 --------------------------------------------------------------------------------
 -- | Top level node for holding nodes
@@ -54,8 +56,8 @@ fromJsNode n@(jnode -> J.JSSourceElementsTop nodes) =
 fromJsNode n@(jnode -> J.JSIf _ _ cond _ body el) =
   If {
     if_cond   = fromJsNode cond
-  , if_body   = Compound (map fromJsNode (traceNodes body)) (infoFromNode n) Statement
-  , if_else   = Just $ Compound (map fromJsNode (traceNodes el)) (infoFromNode n) Statement
+  , if_body   = disregardTokens' body
+  , if_else   = disregardTokens el
   , node_info = infoFromNode n
   , node_kind = Statement
   }
@@ -63,27 +65,86 @@ fromJsNode n@(jnode -> J.JSIf _ _ cond _ body el) =
     traceNodes nodes = trace (show $ map (lstrip . pp) nodes) nodes
 
 --------------------------------------------------------------------------------
--- | Binary Expression
+-- | Binary expression
 --------------------------------------------------------------------------------
 fromJsNode n@(jnode -> J.JSExpressionBinary _ lhs op rhs) =
   BinaryOp {
     bin_op    = fromJsBinOp op
-  , bin_node1 = grp lhs
-  , bin_node2 = grp rhs
+  , bin_node1 = disregardTokens' lhs
+  , bin_node2 = disregardTokens' rhs
   , node_info = infoFromNode n
-  , node_kind = Expression
+  , node_kind = expression
   }
-  where
-    grp [] = error "No nodes in javascript binary expression"
-    grp nodes@(n:_) =
-      Compound (map fromJsNode nodes) (infoFromNode n) Expression
 
+fromJsNode n@(jnode -> J.JSDecimal s) =
+  Literal {
+    lit_type = IntLiteral (read s)
+  , lit_str  = Just s
+  , node_info = infoFromNode n
+  , node_kind = expression
+  }
+
+--------------------------------------------------------------------------------
+-- | Variables
+--------------------------------------------------------------------------------
+fromJsNode n@(jnode -> J.JSVariables _ decls _) =
+  Compound (map fromJsNode decls) (infoFromNode n) Statement
+
+--------------------------------------------------------------------------------
+-- | Variable declaration
+--------------------------------------------------------------------------------
+fromJsNode n@(jnode -> J.JSVarDecl nn v) =
+  case disregardTokens v of
+    Nothing -> updateKind convertedNode declaration
+    Just ns -> updateKind convertedNode Declaration {
+      decl_init = Just Assign { asn_op   = DefaultAssign
+                              , asn_to   = convertedNode
+                              , asn_from = ns
+                              , node_info = infoFromNode n
+                              , node_kind = declaration
+                              }
+    , kind_props = []
+    }
+  where
+    updateKind var@(Var{}) d = var { node_kind = d }
+    updateKind _ _           = error "JSVarDecl node1 is not an identifier"
+    convertedNode = fromJsNode nn
+    convertedName = ident_name . var_ident $ convertedNode
+
+--------------------------------------------------------------------------------
+-- | Identifiers
+--------------------------------------------------------------------------------
+fromJsNode n@(jnode -> J.JSIdentifier s) = jsVarDecl s info
+  where info = infoFromNode n
+
+--------------------------------------------------------------------------------
+-- | language-javascript mixes tokens with the ast for accurate representation
+--   when printing. We can safely ignore them for our purposes
+--------------------------------------------------------------------------------
+fromJsNode n@(jnode -> J.JSLiteral _) = discard
 
 --------------------------------------------------------------------------------
 -- | Unknown node
 --------------------------------------------------------------------------------
-fromJsNode n = let nn = jnode n in
-  UnkNode (show nn) (infoFromNode n) Unknown
+fromJsNode n = UnkNode (P.showStripped n) (infoFromNode n) Unknown
+
+jsVarDecl s i = Var (Ident s Nothing i) i expression
+
+ppNodes :: [J.JSNode] -> String
+ppNodes = intercalate "," . map pp
+
+disregardTokens' nodes =
+  let err = error $ "Only tokens in node list" ++ ppNodes nodes
+  in fromMaybe err $ disregardTokens nodes
+
+disregardTokens :: [J.JSNode] -> Maybe Node
+disregardTokens nodes =
+  let nodes' = filter isntDiscard $ map fromJsNode nodes
+      ppNodes' = ppNodes nodes
+  in case nodes' of
+    [n]  -> Just n
+    []   -> Nothing
+    n:_  -> error $ "More than one non-discarded node in disregardTokens " ++ ppNodes'
 
 --------------------------------------------------------------------------------
 -- | Binary Operators
