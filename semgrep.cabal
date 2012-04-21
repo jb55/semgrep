@@ -6,7 +6,12 @@ build-type:     Simple
 executable semgrep
   hs-source-dirs:  src
   main-is:         Main.hs
-  build-depends:   base >= 4, language-c, syb, language-python, pretty, MissingH,
-                   language-javascript
+  build-depends:     base >= 4
+                   , language-c
+                   , syb
+                   , language-python >= 0.4 && < 0.5
+                   , pretty
+                   , MissingH
+                   , language-javascript == 0.4.10
   ghc-options:     -W
 

@@ -17,10 +17,6 @@ import           System.IO
 import           Semgrep ( PythonVersion(..)
                          )
 
-instance Monoid Pr.Doc where
-  mempty = Pr.empty
-  mappend = (Pr.<>)
-
 type PyAnno = SrcSpan
 type PyStmt     = P.Statement PyAnno
 type PyAssignOp = P.AssignOp PyAnno

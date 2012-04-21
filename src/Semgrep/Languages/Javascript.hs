@@ -2,23 +2,31 @@
 
 module Semgrep.Languages.Javascript where
 
+import qualified Language.JavaScript.Pretty.Printer as PP
 import qualified Language.JavaScript.Parser.AST as J
-import qualified Language.JavaScript.Parser.Parser as P
+import qualified Language.JavaScript.Parser as P
+import           Data.String.Utils (lstrip)
 import           System.IO
 import           Semgrep.Languages.Generic
+import           Debug.Trace (trace)
 
-fromSpan' :: J.SrcSpan -> Maybe Position
-fromSpan' (J.SpanCoLinear f r s e)        = Just $ PosSpanLine f r s e
-fromSpan' (J.SpanMultiLine f rs cs re ce) = Just $ PosSpanLines f rs re cs ce
-fromSpan' (J.SpanPoint f r c)             = Just $ PosPoint f r c
-fromSpan' (J.SpanEmpty {})                = Nothing
+pp = PP.renderToString
+
+fromTokPos :: P.TokenPosn -> Maybe Position
+fromTokPos (P.TokenPn _ r c) = Just $ PosPoint "" r c
+
+maybeTok :: J.JSNode -> Maybe P.TokenPosn
+maybeTok (J.NT _ tok _) = Just tok
+maybeTok _              = Nothing
 
 infoFromNode :: J.JSNode -> NInfo
-infoFromNode (J.NS n span) =
-  NInfo (fromSpan' span) (Just $ take 20 $ show n)
+infoFromNode jn = NInfo (maybeTok jn >>= fromTokPos) s
+  where
+    s = Just $ lstrip $ pp jn
 
 jnode :: J.JSNode -> J.Node
-jnode (J.NS n _) = n
+jnode (J.NT n _ _) = n
+jnode (J.NN n)     = n
 
 --------------------------------------------------------------------------------
 -- | Convert from JSNode to Node
@@ -28,8 +36,8 @@ fromJsNode :: J.JSNode -> Node
 --------------------------------------------------------------------------------
 -- | Block statements
 --------------------------------------------------------------------------------
-fromJsNode n@(jnode -> J.JSBlock node) =
-  Block [fromJsNode node] (infoFromNode n) Statement
+fromJsNode n@(jnode -> J.JSBlock _ nodes _) =
+  Block (map fromJsNode nodes) (infoFromNode n) Statement
 
 fromJsNode n@(jnode -> J.JSExpression nodes) =
   Block (map fromJsNode nodes) (infoFromNode n) Statement
@@ -43,24 +51,45 @@ fromJsNode n@(jnode -> J.JSSourceElementsTop nodes) =
 --------------------------------------------------------------------------------
 -- | If statements
 --------------------------------------------------------------------------------
-fromJsNode n@(jnode -> J.JSIfElse n1 n2 n3) =
-  If (fromJsNode n1)
-     (fromJsNode n2)
-     (Just $ fromJsNode n3)
-     (infoFromNode n)
-     Statement
+fromJsNode n@(jnode -> J.JSIf _ _ cond _ body el) =
+  If {
+    if_cond   = fromJsNode cond
+  , if_body   = Compound (map fromJsNode (traceNodes body)) (infoFromNode n) Statement
+  , if_else   = Just $ Compound (map fromJsNode (traceNodes el)) (infoFromNode n) Statement
+  , node_info = infoFromNode n
+  , node_kind = Statement
+  }
+  where
+    traceNodes nodes = trace (show $ map (lstrip . pp) nodes) nodes
 
-fromJsNode n@(jnode -> J.JSIf n1 n2) =
-  If (fromJsNode n1)
-     (fromJsNode n2)
-     Nothing
-     (infoFromNode n)
-     Statement
+--------------------------------------------------------------------------------
+-- | Binary Expression
+--------------------------------------------------------------------------------
+fromJsNode n@(jnode -> J.JSExpressionBinary _ lhs op rhs) =
+  BinaryOp {
+    bin_op    = fromJsBinOp op
+  , bin_node1 = grp lhs
+  , bin_node2 = grp rhs
+  , node_info = infoFromNode n
+  , node_kind = Expression
+  }
+  where
+    grp [] = error "No nodes in javascript binary expression"
+    grp nodes@(n:_) =
+      Compound (map fromJsNode nodes) (infoFromNode n) Expression
+
 
 --------------------------------------------------------------------------------
 -- | Unknown node
 --------------------------------------------------------------------------------
-fromJsNode n@(J.NS ns span) = UnkNode (show ns) (infoFromNode n) Unknown
+fromJsNode n = let nn = jnode n in
+  UnkNode (show nn) (infoFromNode n) Unknown
+
+--------------------------------------------------------------------------------
+-- | Binary Operators
+--------------------------------------------------------------------------------
+fromJsBinOp :: J.JSNode -> BinOp
+fromJsBinOp jn = UnkOp (pp jn)
 
 --------------------------------------------------------------------------------
 -- | Simple module constructor
